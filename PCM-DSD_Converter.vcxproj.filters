@@ -1,0 +1,258 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="ソース ファイル">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="ヘッダー ファイル">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="リソース ファイル">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\FLAC">
+      <UniqueIdentifier>{c1474832-7c6f-4433-8a4f-a8a6ed2f0583}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\FLAC\FLAC">
+      <UniqueIdentifier>{dfe041c2-3aba-441a-99d2-0564d3405943}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\FLAC\share">
+      <UniqueIdentifier>{a8328e3e-b021-4242-9262-432ace11b147}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\FAAD2">
+      <UniqueIdentifier>{1c9f1c85-db3e-43ee-a4dc-20ad1b34e73f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\ALAC">
+      <UniqueIdentifier>{e1f919e1-5080-4ff7-8ef1-ab805f6011ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\ALAC">
+      <UniqueIdentifier>{63860e17-d94c-40df-a6d5-02f6bcdbfb79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\FAAD2">
+      <UniqueIdentifier>{e5d49541-d1b0-4958-aa5a-6e460a473025}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\mp3infp">
+      <UniqueIdentifier>{512c363f-eeef-4ec4-ab59-7db3efea1bb4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\mp3infp">
+      <UniqueIdentifier>{6ae46cc5-95e9-463a-b77e-d85407bc1623}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="PCM-DSD_Converter.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="PCM-DSD_ConverterDlg.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="stdafx.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="ProgressDlg.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="IniFile.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\alloc.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\compat.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\endswap.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\getopt.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\grabbag.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\macros.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\private.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\replaygain_analysis.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\replaygain_synthesis.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\safe_str.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\utf8.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\win_utf8_io.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\share\windows_unicode_filenames.h">
+      <Filter>ヘッダー ファイル\FLAC\share</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\all.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\assert.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\callback.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\export.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\format.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\metadata.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\ordinals.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\stream_decoder.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FLAC\include\FLAC\stream_encoder.h">
+      <Filter>ヘッダー ファイル\FLAC\FLAC</Filter>
+    </ClInclude>
+    <ClInclude Include="DffToDsfConv.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\matrixlib.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\EndianPortable.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\dplib.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\ALACDecoder.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\ALACBitUtilities.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\ALACAudioTypes.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="alac\codec\aglib.h">
+      <Filter>ヘッダー ファイル\ALAC</Filter>
+    </ClInclude>
+    <ClInclude Include="FAAD2\mp4ff.h">
+      <Filter>ヘッダー ファイル\FAAD2</Filter>
+    </ClInclude>
+    <ClInclude Include="FAAD2\mp4ffint.h">
+      <Filter>ヘッダー ファイル\FAAD2</Filter>
+    </ClInclude>
+    <ClInclude Include="AlacDecode.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="strconverter.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="mp3infp\GlobalCommand.h">
+      <Filter>ヘッダー ファイル\mp3infp</Filter>
+    </ClInclude>
+    <ClInclude Include="mp3infp\RiffSIF.h">
+      <Filter>ヘッダー ファイル\mp3infp</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="PCM-DSD_Converter.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="PCM-DSD_ConverterDlg.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="ProgressDlg.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="IniFile.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="DffToDsfConv.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="alac\codec\ag_dec.c">
+      <Filter>ソース ファイル\ALAC</Filter>
+    </ClCompile>
+    <ClCompile Include="alac\codec\ALACBitUtilities.c">
+      <Filter>ソース ファイル\ALAC</Filter>
+    </ClCompile>
+    <ClCompile Include="alac\codec\dp_dec.c">
+      <Filter>ソース ファイル\ALAC</Filter>
+    </ClCompile>
+    <ClCompile Include="alac\codec\EndianPortable.c">
+      <Filter>ソース ファイル\ALAC</Filter>
+    </ClCompile>
+    <ClCompile Include="alac\codec\matrix_dec.c">
+      <Filter>ソース ファイル\ALAC</Filter>
+    </ClCompile>
+    <ClCompile Include="alac\codec\ALACDecoder.cpp">
+      <Filter>ソース ファイル\ALAC</Filter>
+    </ClCompile>
+    <ClCompile Include="FAAD2\mp4atom.c">
+      <Filter>ソース ファイル\FAAD2</Filter>
+    </ClCompile>
+    <ClCompile Include="FAAD2\mp4ff.c">
+      <Filter>ソース ファイル\FAAD2</Filter>
+    </ClCompile>
+    <ClCompile Include="FAAD2\mp4meta.c">
+      <Filter>ソース ファイル\FAAD2</Filter>
+    </ClCompile>
+    <ClCompile Include="FAAD2\mp4sample.c">
+      <Filter>ソース ファイル\FAAD2</Filter>
+    </ClCompile>
+    <ClCompile Include="FAAD2\mp4tagupdate.c">
+      <Filter>ソース ファイル\FAAD2</Filter>
+    </ClCompile>
+    <ClCompile Include="FAAD2\mp4util.c">
+      <Filter>ソース ファイル\FAAD2</Filter>
+    </ClCompile>
+    <ClCompile Include="AlacDecode.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="strconverter.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="mp3infp\GlobalCommand.cpp">
+      <Filter>ソース ファイル\mp3infp</Filter>
+    </ClCompile>
+    <ClCompile Include="mp3infp\RiffSIF.cpp">
+      <Filter>ソース ファイル\mp3infp</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="PCMDSDConverter.rc">
+      <Filter>リソース ファイル</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\PCMDSDConverter.rc2">
+      <Filter>リソース ファイル</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\PCM-DSD_Converter.ico">
+      <Filter>リソース ファイル</Filter>
+    </Image>
+  </ItemGroup>
+</Project>
