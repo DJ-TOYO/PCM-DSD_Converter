@@ -1,0 +1,25 @@
+WAVEFORMATEX structure
+https://docs.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatex
+
+
+WAVEFORMATEXTENSIBLE structure
+https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible
+
+
+KSPROPERTY structure
+https://docs.microsoft.com/ja-jp/windows-hardware/drivers/stream/ksproperty-structure
+
+
+WAV (Waveform Audio File Format)
+https://so-zou.jp/software/tech/file/format/wav/#no5
+
+
+WAVEFORMATEXTENSIBLE
+wValidBitsPerSample
+多くの場合、サンプルの精度を指定するwValidBitsPerSampleメンバーには、
+サンプルコンテナのサイズを指定するFormat.wBitsPerSampleメンバーと同じ値が含まれています。
+ただし、これらの値は異なる場合があります。
+たとえば、ウェーブデータが20ビットA / Dコンバーターから発信された場合、
+wValidBitsPerSampleは20である必要がありますが、Format.wBitsPerSampleは24または32である可能性があります。
+wValidBitsPerSampleがFormat.wBitsPerSampleより小さい場合、有効なビット（実際のPCMデータ） ）はコンテナ内で左揃えになります。
+コンテナの最下位部分の未使用ビットはゼロに設定する必要があります。

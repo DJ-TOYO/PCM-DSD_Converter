@@ -184,6 +184,13 @@ typedef struct {
 }CUE64;
 #pragma pack(pop)
 
+// 振幅データ
+typedef struct {
+	double dAmpPeak[2];				// 振幅ピーク値 [0]:Ch L [1]:Ch R
+	double dAmpSum[2];				// 振幅積算値 [0]:Ch L [1]:Ch R
+	UINT64 ullAmpSumCnt[2];			// 振幅積算数 [0]:Ch L [1]:Ch R
+}ST_AMP_POWER,*PST_AMP_POWER;
+
 // CPCMDSD_ConverterDlg ダイアログ
 class CPCMDSD_ConverterDlg : public CDialogEx
 {
@@ -207,7 +214,8 @@ protected:
 	// 生成された、メッセージ割り当て関数
 	virtual BOOL OnInitDialog();
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
-	virtual void ListInit();
+	void ListInit();
+	void ListRegistDisp();
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
@@ -239,6 +247,8 @@ protected:
 	int m_nGainLimitIdx;				// ゲイン制限選択
 	int m_NormalizeFlag;				// ノーマライズ 0:無効 1:有効
 	int m_NormalizeFlagLast;			// 起動時のノーマライズ 0:無効 1:有効
+	int m_CrossGainLevel;				// ゲイン調整掛け合わせ 0:無効 1:有効
+	int m_CrossGainLevelLast;			// 起動時のゲイン調整掛け合わせ 0:無効 1:有効
 	int m_Pcm48KHzEnableDsd3MHzFlag;	// 48KHz系PCMは、DSD3.0MHzとして出力する　0:無効 1:有効
 	int m_DsfOverWriteFlag;				// DSF上書きモード 0:しない 1:する
 	int m_radioGainMode;				// 起動時のゲインモード ※現在のゲインモードはm_radioGainModeDdv(DDV変数)を参照する事。
@@ -279,6 +289,11 @@ protected:
 	int m_nDsdSampling176400;			// 176400 or 192000
 	int m_nDsdSampling352800;			// 352800 or 384000
 	int m_nDsdSampling705600;			// 705600 or 768000
+	int m_nDsdSampling44100Diff;		// 44100 or 48000 ※変更チェック用
+	int m_nDsdSampling88200Diff;		// 88200  or 96000 ※変更チェック用
+	int m_nDsdSampling176400Diff;		// 176400 or 192000 ※変更チェック用
+	int m_nDsdSampling352800Diff;		// 352800 or 384000 ※変更チェック用
+	int m_nDsdSampling705600Diff;		// 705600 or 768000 ※変更チェック用
 
 	DWORD dwCompletionNoticeFlag;		// 完了通知 00B:なし 01B:音を鳴らす 10B:画面を復帰させる
 
@@ -287,9 +302,12 @@ protected:
 	int m_nWindowGetPosMode;			// 前回ウィンドウ位置の取得方法 0:GetSystemMetricsによる仮想スクリーンサイズ 1:MonitorFromRectによる近いモニタ
 	BOOL m_bWindowMonitorBorder;		// 前回ウィンドウ位置がモニタ外の場合　0:何もしない　1:一番近いモニタのモニタ内に補正する
 
-	double m_amp_peak[2];				// 振幅ピーク値 [0]:Ch L [1]:Ch R
-	double m_amp_sum[2];				// 振幅積算値 [0]:Ch L [1]:Ch R
-	double m_amp_sum_cnt[2];			// 振幅積算数 [0]:Ch L [1]:Ch R
+//	double m_amp_peak[2];				// 振幅ピーク値 [0]:Ch L [1]:Ch R
+//	double m_amp_sum[2];				// 振幅積算値 [0]:Ch L [1]:Ch R
+//	double m_amp_sum_cnt[2];			// 振幅積算数 [0]:Ch L [1]:Ch R
+	ST_AMP_POWER stAmp;					// 振幅データ
+	ST_AMP_POWER stAmpPeakdB;			// 振幅データピークデシベル用
+	double m_dAvgPeakdB[2];				// 平均ピークdB [0]:Ch L [1]:Ch R
 	double m_AveragedB[3];				// 平均dB [0]:Ch L [1]:Ch R [2]:Ch L+R
 	double m_LimitdB;					// 制限dB
 	double m_DiffdB;					// 制限db差分
@@ -302,6 +320,8 @@ protected:
 
 	CDffToDsfConv m_DffToDsfObj;		// DFF to DSF変換
 	CAlacDecode m_AlacDecodeObj;		// ALACデコード
+
+	int m_nListRegistCnt;				// リストコントロール登録件数
 
 public:
 	virtual void OnCancel();
@@ -432,18 +452,31 @@ public:
 	afx_msg bool TrushFile(TCHAR *filepath, CString flag);
 	//Wavファイルを64bit Float(double)化し、LR分離して一時ファイルとして書き出し
 //	afx_msg bool TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times);
-	afx_msg bool TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FILE *tmpl, FILE *tmpr, int DSD_Times, unsigned int *Times);
+	afx_msg bool TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FILE *tmpl, FILE *tmpr, int DSD_Times, unsigned int *Times, int number);
 	// 振幅を解析　戻り値：デシベル変換値
-	double PcmAnalysis(double amp_value, int ch);
+	void PcmAnalysis(double amp_value, int ch, int nPcmSamplingRate);
+	// 振幅ピーク値取得 ※左右Chの大きい方
+	double GetPeakAmp();
+	// 平均デシベルピーク取得 ※左右Chの大きい方
+	double GetAvgPeakdB();
+	// 平均ピークデシベル取得
+	void CalcPeakdB();
+	void CalcPeakdB(int ch);
 	// 平均デシベル取得
 	double GetAveragedB(double *dbL, double *dbR);
 	// デシベルから倍率取得
 	double GetdBtoPower(double ddB);
+	// 振幅からデシベル取得
+	double GetPowertodB(double dAmpPower);
 	//PCM-DSD変換
 	afx_msg bool WAV_Filter(FILE *UpSampleData, FILE *OrigData, unsigned int Times, omp_lock_t *myLock, int *pErr, int mode = 0);
 	afx_msg bool WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, unsigned int Times, int *pErr, int mode = 0);
 	// オーバーサンプリング
 	bool WAV_Oversampling(FILE *UpSampleData, FILE *OrigData, unsigned int Times, omp_lock_t *myLock);
+	// 最終フォルダ名名取得
+	CString GetLastPath(TCHAR *filepath);
+	// ファイル名取得
+	CString GetFileName(TCHAR *filepath);
 	//フリーズ防止のためにスレッド作成
 	void WorkThread();
 	// 拡張子種別取得 
@@ -496,8 +529,6 @@ public:
 	afx_msg void OnBnClickedCheckNormalize();
 	CButton m_bcPathClear;
 	afx_msg void OnBnClickedButtonPathClear();
-	CButton m_chkboxEnableDsd3MHz;
-	afx_msg void OnBnClickedCheckDsd3mhzEnable();
 	CButton m_chkboxFileOverWrite;
 	afx_msg void OnBnClickedCheckFileoverwrite();
 	CButton m_btnAlbumRun;
@@ -518,6 +549,17 @@ public:
 	void GainModeGroupDisp();
 	afx_msg void OnBnClickedRadioGainMode1();
 	afx_msg void OnBnClickedRadioGainMode2();
+	CButton m_chkboxCrossGainLevel;
+	afx_msg void OnBnClickedCheckCrossGainlevel();
+	afx_msg void OnBnClickedButtonSetting();
+	CButton m_btnAutSetting;
+	void AutoSettingBtnEnableProc();
+	afx_msg void OnCbnSelchangeSamplingrate();
+	CEdit m_editEncoderPerson;
+	CStatic m_staEncoderPerson;
+	CString m_evEncoderPerson;
+	CStatic m_scRegistCnt;
+	afx_msg void OnLvnInsertitemFilelist(NMHDR* pNMHDR, LRESULT* pResult);
 };
 
 static int CALLBACK BrowseCallbackProc(HWND hWnd, UINT uMsg, LPARAM lParam, LPARAM lpData);

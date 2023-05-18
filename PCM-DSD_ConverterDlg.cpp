@@ -13,6 +13,7 @@
 #include "mp3infp\RiffSIF.h"
 #include "IniFile.h"
 #include "strconverter.h"
+#include "AutoSettingDlg.h"
 #include <stdio.h>
 #include <string.h>
 #include <mmsystem.h>
@@ -29,6 +30,8 @@ using namespace std;
 
 //#define ENABLE_OUTPUT_DFF	// DFF出力
 #define ENABLE_OUTPUT_DSF	// DSF出力
+
+#define GAIN_CONTROL_MODE	0		// ゲイン調整 0:DSD 1:PCM
 
 #define DISPLAY_ON -1
 #define ABSOLUTE_PATH_MAX	MAX_PATH		// 絶対パスの最大サイズ
@@ -65,6 +68,7 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 	, m_evPath(_T(""))
 	, m_evAlbumTagSuffix(_T(""))
 	, m_radioGainModeDdv(FALSE)
+	, m_evEncoderPerson(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
@@ -109,14 +113,16 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 		}
 
 		if (m_IniFile.GetPrivateProfile(_T("OPTION"), _T("GainMode"), -1, &m_radioGainMode) == -1) {
-			m_radioGainMode = 0;
+			m_radioGainMode = 0;		// ゲイン調整
+//			m_radioGainMode = 1;		// ゲイン制限
 			m_IniFile.WritePrivateProfile(_T("OPTION"), _T("GainMode"), m_radioGainMode);
 		}
 //		m_radioGainModeDdv = m_radioGainMode;
 
 		if (m_IniFile.GetPrivateProfile(_T("OPTION"), _T("GainLevel"), -1, &m_nGainLevelIdx) == -1) {
-//			m_nGainLevelIdx = 1;
-			m_nGainLevelIdx = 5;
+//			m_nGainLevelIdx = 1;	// -0.1dB
+//			m_nGainLevelIdx = 5;	// -0.5dB
+			m_nGainLevelIdx = 10;	// -1,0dB
 			m_IniFile.WritePrivateProfile(_T("OPTION"), _T("GainLevel"), m_nGainLevelIdx);
 		}
 
@@ -148,6 +154,12 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 		m_NormalizeFlag = m_NormalizeFlagLast;
 //		m_NormalizeEnable = m_NormalizeFlag;
 
+		if (m_IniFile.GetPrivateProfile(_T("OPTION"), _T("CrossGainLevelEnable"), -1, (int*)&m_CrossGainLevelLast) == -1) {
+			m_CrossGainLevelLast = 0;
+			m_IniFile.WritePrivateProfile(_T("OPTION"), _T("CrossGainLevelEnable"), (int)m_CrossGainLevelLast);
+		}
+		m_CrossGainLevel = m_CrossGainLevelLast;
+
 		if (m_IniFile.GetPrivateProfile(_T("OPTION"), _T("OutFileOverWrite"), -1, (int*)&m_DsfOverWriteFlag) == -1) {
 			m_DsfOverWriteFlag = 0;
 			m_IniFile.WritePrivateProfile(_T("OPTION"), _T("OutFileOverWrite"), (int)m_DsfOverWriteFlag);
@@ -168,26 +180,31 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 			m_nDsdSampling44100 = 64;
 			m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling44100"), m_nDsdSampling44100);
 		}
+		m_nDsdSampling44100Diff = m_nDsdSampling44100;
 
 		if (m_IniFile.GetPrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling88200"), -1, &m_nDsdSampling88200) == -1) {
 			m_nDsdSampling88200 = 128;
 			m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling88200"), m_nDsdSampling88200);
 		}
+		m_nDsdSampling88200Diff = m_nDsdSampling88200;
 
 		if (m_IniFile.GetPrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling176400"), -1, &m_nDsdSampling176400) == -1) {
 			m_nDsdSampling176400 = 256;
 			m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling176400"), m_nDsdSampling176400);
 		}
+		m_nDsdSampling176400Diff = m_nDsdSampling176400;
 
 		if (m_IniFile.GetPrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling352800"), -1, &m_nDsdSampling352800) == -1) {
 			m_nDsdSampling352800 = 256;
 			m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling352800"), m_nDsdSampling352800);
 		}
+		m_nDsdSampling352800Diff = m_nDsdSampling352800;
 
 		if (m_IniFile.GetPrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling705600"), -1, &m_nDsdSampling705600) == -1) {
 			m_nDsdSampling705600 = 256;
 			m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling705600"), m_nDsdSampling705600);
 		}
+		m_nDsdSampling705600Diff = m_nDsdSampling705600;
 	}
 }
 
@@ -200,10 +217,10 @@ void CPCMDSD_ConverterDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDB_Run, m_bRun);
 	DDX_Control(pDX, IDB_ListDelete, m_bListDelete);
 	DDX_Control(pDX, IDC_SamplingRate, m_cSamplingRate);
-	DDX_Control(pDX, IDS_STATIC, m_sSamplingRate);
-	DDX_Control(pDX, IDS_STATIC2, m_scPrecision);
+	DDX_Control(pDX, IDS_STATIC_SAMPLING_RATE, m_sSamplingRate);
+	DDX_Control(pDX, IDS_STATIC_PRECISION, m_scPrecision);
 	DDX_Control(pDX, IDC_Precision, m_ccPrecision);
-	DDX_Control(pDX, IDS_STATIC3, m_scPath);
+	DDX_Control(pDX, IDS_STATIC_EDITPATH, m_scPath);
 	DDX_Control(pDX, IDC_EditPath, m_ecPath);
 	DDX_Control(pDX, IDC_PathCheck, m_bcPath);
 	DDX_Text(pDX, IDC_EditPath, m_evPath);
@@ -214,7 +231,6 @@ void CPCMDSD_ConverterDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDITALBUM_TAG_SUFFIX, m_evAlbumTagSuffix);
 	DDX_Control(pDX, IDC_CHECK_NORMALIZE, m_chkboxNormalize);
 	DDX_Control(pDX, IDC_BUTTON_PATH_CLEAR, m_bcPathClear);
-	DDX_Control(pDX, IDC_CHECK_DSD3MHZ_ENABLE, m_chkboxEnableDsd3MHz);
 	DDX_Control(pDX, IDC_CHECK_FILEOVERWRITE, m_chkboxFileOverWrite);
 	DDX_Control(pDX, IDB_AlbumRun, m_btnAlbumRun);
 	DDX_Control(pDX, IDS_STATIC_COMPLETE_OPTION, m_staticCompleteOption);
@@ -224,6 +240,12 @@ void CPCMDSD_ConverterDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_RADIO_GAIN_MODE1, m_radioGainMode1);
 	DDX_Control(pDX, IDC_RADIO_GAIN_MODE2, m_radioGainMode2);
 	DDX_Control(pDX, IDC_GAINLIMITLEVEL, m_combLimitVol);
+	DDX_Control(pDX, IDC_CHECK_CROSS_GAINLEVEL, m_chkboxCrossGainLevel);
+	DDX_Control(pDX, IDC_BUTTON_SETTING, m_btnAutSetting);
+	DDX_Control(pDX, IDC_EDIT_ENCODER_PERSON, m_editEncoderPerson);
+	DDX_Control(pDX, IDS_STATIC_ENCODER_PERSON, m_staEncoderPerson);
+	DDX_Text(pDX, IDC_EDIT_ENCODER_PERSON, m_evEncoderPerson);
+	DDX_Control(pDX, IDC_STATIC_REGISTCNT, m_scRegistCnt);
 }
 
 BEGIN_MESSAGE_MAP(CPCMDSD_ConverterDlg, CDialogEx)
@@ -242,7 +264,6 @@ BEGIN_MESSAGE_MAP(CPCMDSD_ConverterDlg, CDialogEx)
 	ON_NOTIFY(LVN_KEYDOWN, IDL_FileList, &CPCMDSD_ConverterDlg::OnLvnKeydownFilelist)
 	ON_BN_CLICKED(IDC_CHECK_NORMALIZE, &CPCMDSD_ConverterDlg::OnBnClickedCheckNormalize)
 	ON_BN_CLICKED(IDC_BUTTON_PATH_CLEAR, &CPCMDSD_ConverterDlg::OnBnClickedButtonPathClear)
-	ON_BN_CLICKED(IDC_CHECK_DSD3MHZ_ENABLE, &CPCMDSD_ConverterDlg::OnBnClickedCheckDsd3mhzEnable)
 	ON_BN_CLICKED(IDC_CHECK_FILEOVERWRITE, &CPCMDSD_ConverterDlg::OnBnClickedCheckFileoverwrite)
 	ON_BN_CLICKED(IDB_AlbumRun, &CPCMDSD_ConverterDlg::OnBnClickedAlbumrun)
 	ON_EN_CHANGE(IDC_EDITALBUM_TAG_SUFFIX, &CPCMDSD_ConverterDlg::OnEnChangeEditalbumTagSuffix)
@@ -251,6 +272,10 @@ BEGIN_MESSAGE_MAP(CPCMDSD_ConverterDlg, CDialogEx)
 	ON_CBN_SELCHANGE(IDC_COMBO_COMPLETE_OPTION, &CPCMDSD_ConverterDlg::OnCbnSelchangeComboCompleteOption)
 	ON_BN_CLICKED(IDC_RADIO_GAIN_MODE1, &CPCMDSD_ConverterDlg::OnBnClickedRadioGainMode1)
 	ON_BN_CLICKED(IDC_RADIO_GAIN_MODE2, &CPCMDSD_ConverterDlg::OnBnClickedRadioGainMode2)
+	ON_BN_CLICKED(IDC_CHECK_CROSS_GAINLEVEL, &CPCMDSD_ConverterDlg::OnBnClickedCheckCrossGainlevel)
+	ON_BN_CLICKED(IDC_BUTTON_SETTING, &CPCMDSD_ConverterDlg::OnBnClickedButtonSetting)
+	ON_CBN_SELCHANGE(IDC_SamplingRate, &CPCMDSD_ConverterDlg::OnCbnSelchangeSamplingrate)
+	ON_NOTIFY(LVN_INSERTITEM, IDL_FileList, &CPCMDSD_ConverterDlg::OnLvnInsertitemFilelist)
 END_MESSAGE_MAP()
 
 
@@ -298,7 +323,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 			CString strUser;
 
 			strUser = GetUserName();
-			msg = _T("変換ファイルにエンコーダ者タグの設定をユーザー名「") + strUser + _T("」にしますか？\n\nキャンセルした場合は「")  + m_AppName + _T("」が設定されます\nPCM-DSD_Converter.iniファイルの「EncodedBy=」を書き換える事で変更出来ます。");
+			msg = _T("変換ファイルに作成者(エンコーダした人)タグの設定をユーザー名「") + strUser + _T("」にしますか？\n\nキャンセルした場合は「")  + m_AppName + _T("」が設定されます。\n後でも変更出来ます。");
 			if(MessageBox(msg, m_AppName + L" 【初期設定】", MB_OKCANCEL) == IDOK){
 				// ログインユーザー取得
 				m_strEncodedBy = strUser;
@@ -323,7 +348,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 		}
 		m_strEncodedBy.Trim();
 
-		//*** エンコーダー者の設定がPCM-DSD_Converter 改名なら比較してVer不一致するなら更新する ***
+		//*** エンコーダー者の設定が「PCM-DSD_Converter 改」が含まれるならVer不一致するなら更新する ※そんな名前の人いないだろうから***
 		int idx;
 		idx = m_strEncodedBy.Find(strTitleIni, 0);
 		// ダイアログタイトルが含まれる？
@@ -334,6 +359,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 				m_strEncodedBy = m_AppName;
 			}
 		}
+		m_evEncoderPerson = m_strEncodedBy;
 
 		setlocale(LC_CTYPE, "jpn");
 
@@ -348,9 +374,10 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 		m_cSamplingRate.AddString(_T("DSD1024"));
 		m_cSamplingRate.AddString(_T("DSD2048"));
 		m_cSamplingRate.SetCurSel(m_nDSDidx);
+		AutoSettingBtnEnableProc();
 		m_ccPrecision.SetCurSel(m_nPrecisionIdx);
-		m_chkboxEnableDsd3MHz.SetCheck(m_Pcm48KHzEnableDsd3MHzFlag);
 		m_chkboxNormalize.SetCheck(m_NormalizeFlag);
+		m_chkboxCrossGainLevel.SetCheck(m_CrossGainLevel);
 		m_chkboxFileOverWrite.SetCheck(m_DsfOverWriteFlag);
 
 		CString strToolTip;
@@ -362,7 +389,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 		strToolTip += _T("DSD 512：22.5/24.5MHz\n");
 		strToolTip += _T("DSD1024：45.1/49.1MHz\n");
 		strToolTip += _T("DSD2048：90.3/98.3MHz\n");
-		strToolTip += _T("※AUTOについてはドキュメント参照願います。\n");
+		strToolTip += _T("※AUTOは設定ボタンで設定した内容で変換されます。\n");
 		m_tooltipSamplingRate.Create(this);
 		m_tooltipSamplingRate.SetMaxTipWidth(300);
 		m_tooltipSamplingRate.AddTool(GetDlgItem(IDC_SamplingRate), strToolTip);
@@ -439,6 +466,9 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 		// 先頭をフォーカス
 		m_lFileList.SetItemState(0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
 	}
+
+	// リストコントロール登録件数表示
+	ListRegistDisp();
 
 	UpdateData(TRUE);
 
@@ -519,6 +549,19 @@ void CPCMDSD_ConverterDlg::ListInit()
 	}
 }
 
+// リストコントロール登録件数表示
+void CPCMDSD_ConverterDlg::ListRegistDisp()
+{
+	CString strTmp;
+	int nVal;
+	
+	nVal = m_lFileList.GetItemCount();
+	m_nListRegistCnt = nVal;
+	strTmp.Format(_T("%d 件"), nVal);
+
+	m_scRegistCnt.SetWindowText(strTmp);
+}
+
 // ダイアログに最小化ボタンを追加する場合、アイコンを描画するための
 //  下のコードが必要です。ドキュメント/ビュー モデルを使う MFC アプリケーションの場合、
 //  これは、Framework によって自動的に設定されます。
@@ -550,25 +593,27 @@ void CPCMDSD_ConverterDlg::OnPaint()
 		GetClientRect(&rect);
 
 		//③サイズ調整
-		m_lFileList.MoveWindow(0, 0, rect.Width(), rect.Height() - 155);
+		m_lFileList.MoveWindow(0, 0, rect.Width(), rect.Height() - 180);
 
-		m_chkboxFileOverWrite.MoveWindow(rect.Width() - 555, rect.Height() - 150, 110, 20);
+		m_chkboxFileOverWrite.MoveWindow(rect.Width() - 595, rect.Height() - 175, 110, 20);
 
-		m_btnAlbumRun.MoveWindow(rect.Width() - 425, rect.Height() - 150, 80, 20);
-		m_bAllRun.MoveWindow(rect.Width() - 340, rect.Height() - 150, 80, 20);
-		m_bAllListDelete.MoveWindow(rect.Width() - 255, rect.Height() - 150, 80, 20);
-		m_bRun.MoveWindow(rect.Width() - 170, rect.Height() - 150, 80, 20);
-		m_bListDelete.MoveWindow(rect.Width() - 85, rect.Height() - 150, 80, 20);
+		m_btnAlbumRun.MoveWindow(rect.Width() - 485, rect.Height() - 175, 80, 20);
+		m_bAllRun.MoveWindow(rect.Width() - 400, rect.Height() - 175, 80, 20);
+		m_bAllListDelete.MoveWindow(rect.Width() - 315, rect.Height() - 175, 80, 20);
+		m_bRun.MoveWindow(rect.Width() - 230, rect.Height() - 175, 80, 20);
+		m_bListDelete.MoveWindow(rect.Width() - 145, rect.Height() - 175, 80, 20);
 
-		m_cSamplingRate.MoveWindow(rect.Width() - 470, rect.Height() - 125, 80, 20);
-		m_sSamplingRate.MoveWindow(rect.Width() - 555, rect.Height() - 121, 80, 20);
+		m_scRegistCnt.MoveWindow(rect.Width() - 60, rect.Height() - 171, 55, 20);
 
-		m_chkboxEnableDsd3MHz.MoveWindow(rect.Width() - 375, rect.Height() - 125, 240, 20);
+		m_cSamplingRate.MoveWindow(rect.Width() - 490, rect.Height() - 150, 80, 20);
+		m_sSamplingRate.MoveWindow(rect.Width() - 660, rect.Height() - 146, 160, 20);
 
-		m_ccPrecision.MoveWindow(rect.Width() - 470, rect.Height() - 100, 80, 20);
-		m_scPrecision.MoveWindow(rect.Width() - 500, rect.Height() - 96, 80, 20);
+		m_btnAutSetting.MoveWindow(rect.Width() - 405, rect.Height() - 150, 60, 20);
 
-		m_groupGain.MoveWindow(rect.Width() - 340, rect.Height() - 106, 335, 55);
+		m_ccPrecision.MoveWindow(rect.Width() - 490, rect.Height() - 125, 80, 20);
+		m_scPrecision.MoveWindow(rect.Width() - 660, rect.Height() - 121, 160, 20);
+
+		m_groupGain.MoveWindow(rect.Width() - 340, rect.Height() - 150, 335, 60);
 		CRect rectGropGain;
 		CRect rectDialog = rect;
 		ClientToScreen(rectDialog);
@@ -579,22 +624,26 @@ void CPCMDSD_ConverterDlg::OnPaint()
 		rectGropGain.top -= rectDialog.top;
 		rectGropGain.bottom -= rectDialog.top;
 
-		m_radioGainMode1.MoveWindow(rectGropGain.left + 10, rectGropGain.top + 11, 39, 19);
-		m_combVol.MoveWindow(rectGropGain.left + 60, rectGropGain.top + 11, 50, 12);
-		m_chkboxNormalize.MoveWindow(rectGropGain.left + 120, rectGropGain.top + 11, 170, 19);
-		m_radioGainMode2.MoveWindow(rectGropGain.left + 10, rectGropGain.top + 32, 39, 19);
-		m_combLimitVol.MoveWindow(rectGropGain.left + 60, rectGropGain.top + 32, 50, 12);
+		m_radioGainMode1.MoveWindow(rectGropGain.left + 10, rectGropGain.top + 14, 39, 19);
+		m_combVol.MoveWindow(rectGropGain.left + 60, rectGropGain.top + 14, 50, 12);
+		m_chkboxNormalize.MoveWindow(rectGropGain.left + 115, rectGropGain.top + 14, 215, 19);
+		m_radioGainMode2.MoveWindow(rectGropGain.left + 10, rectGropGain.top + 36, 39, 19);
+		m_combLimitVol.MoveWindow(rectGropGain.left + 60, rectGropGain.top + 36, 50, 12);
+		m_chkboxCrossGainLevel.MoveWindow(rectGropGain.left + 115, rectGropGain.top + 36, 215, 19);
 
-		m_editAlbumTagSuffix.MoveWindow(rect.Width() - 470, rect.Height() - 75, 120, 20);
-		m_staticAlbumTagSuffix.MoveWindow(rect.Width() - 580, rect.Height() - 71, 160, 20);
+		m_editAlbumTagSuffix.MoveWindow(rect.Width() - 490, rect.Height() - 100, 140, 20);
+		m_staticAlbumTagSuffix.MoveWindow(rect.Width() - 660, rect.Height() - 96, 160, 20);
 
-		m_scPath.MoveWindow(rect.Width() - 560, rect.Height() - 45, 135, 20);
-		m_ecPath.MoveWindow(rect.Width() - 470, rect.Height() - 50, 335, 20);
+		m_editEncoderPerson.MoveWindow(rect.Width() - 490, rect.Height() - 75, 210, 20);
+		m_staEncoderPerson.MoveWindow(rect.Width() - 660, rect.Height() - 71, 160, 20);
+
+		m_scPath.MoveWindow(rect.Width() - 660, rect.Height() - 45, 160, 20);
+		m_ecPath.MoveWindow(rect.Width() - 490, rect.Height() - 50, 355, 20);
 		m_bcPath.MoveWindow(rect.Width() - 130, rect.Height() - 50, 60, 20);
 		m_bcPathClear.MoveWindow(rect.Width() - 65, rect.Height() - 50, 60, 20);
 
-		m_staticCompleteOption.MoveWindow(rect.Width() - 545, rect.Height() - 20, 75, 20);
-		m_combCompleteOption.MoveWindow(rect.Width() - 470, rect.Height() - 25, 100, 20);
+		m_staticCompleteOption.MoveWindow(rect.Width() - 660, rect.Height() - 20, 160, 20);
+		m_combCompleteOption.MoveWindow(rect.Width() - 490, rect.Height() - 25, 100, 20);
 
 		CDialogEx::OnPaint();
 	}
@@ -680,6 +729,10 @@ void CPCMDSD_ConverterDlg::SaveIniFilee()
 		m_IniFile.WritePrivateProfile(_T("OPTION"), _T("NormalizeEnable"), m_NormalizeFlag);
 	}
 
+	if(m_CrossGainLevel != m_CrossGainLevelLast){
+		m_IniFile.WritePrivateProfile(_T("OPTION"), _T("CrossGainLevelEnable"), m_CrossGainLevel);
+	}
+
 	if(m_DsfOverWriteFlag != m_DsfOverWriteEnable){
 		m_IniFile.WritePrivateProfile(_T("OPTION"), _T("OutFileOverWrite"), m_DsfOverWriteEnable);
 	}
@@ -687,6 +740,30 @@ void CPCMDSD_ConverterDlg::SaveIniFilee()
 	nVal = m_combCompleteOption.GetCurSel();
 	if (nVal != m_nCompletePowerCrl) {
 		m_IniFile.WritePrivateProfile(_T("OPTION"), _T("CompletePowerControl"), nVal);
+	}
+
+	if(m_evEncoderPerson != m_strEncodedBy){
+		m_IniFile.WritePrivateProfile(_T("OPTION"), _T("EncodedBy"), m_evEncoderPerson);
+	}
+
+	if(m_nDsdSampling44100Diff != m_nDsdSampling44100){
+		m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling44100"), m_nDsdSampling44100);
+	}
+
+	if(m_nDsdSampling88200Diff = m_nDsdSampling88200){
+		m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling88200"), m_nDsdSampling88200);
+	}
+
+	if(m_nDsdSampling176400Diff = m_nDsdSampling176400){
+		m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling176400"), m_nDsdSampling176400);
+	}
+
+	if(m_nDsdSampling352800Diff = m_nDsdSampling352800){
+		m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling352800"), m_nDsdSampling352800);
+	}
+
+	if(m_nDsdSampling705600Diff = m_nDsdSampling705600){
+		m_IniFile.WritePrivateProfile(_T("DSDCONVERTMAP"), _T("Sampling705600"), m_nDsdSampling705600);
 	}
 
 	GetWindowPlacement(&wpl);
@@ -1035,7 +1112,7 @@ bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR *filepath, CString *metadata, i
 	GUID SubFormatGUID;
 
 	LONGLONG llOff;
-	unsigned short chnum;
+	unsigned short chnum = 0;
 
 	switch(w64fmt.wf.wFormatTag){
 		case WAVE_FORMAT_PCM:
@@ -1081,6 +1158,7 @@ bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR *filepath, CString *metadata, i
 	metadata[EN_LIST_COLUMN_BIT] = strTmp + strBit;
 
 	int i;
+	stData.ullSampleLength = 0;
 	do{
 		fileObj.Read(&stW64Chunk, sizeof(stW64Chunk));
 		for(i = 0;i < W64_GUID_MAX;i ++){
@@ -2811,7 +2889,7 @@ void CPCMDSD_ConverterDlg::SetID3v2UserTagOriginalFormat(int nMode, CString strF
 		if(m_radioGainModeDdv == 0){
 			m_combVol.GetWindowText(strTmp);
 			strTXXX += strTmp;
-			strTXXX += _T("dB");
+			strTXXX += _T("dB Lower");
 			// ノーマライズ
 			strTXXX += _T(", ");
 			strTXXX += _T("Normalize Option:");
@@ -2824,6 +2902,12 @@ void CPCMDSD_ConverterDlg::SetID3v2UserTagOriginalFormat(int nMode, CString strF
 			m_combLimitVol.GetWindowText(strTmp);
 			strTXXX += strTmp;
 			strTXXX += _T("dB Limit");
+			if(m_CrossGainLevel == 1){
+				strTXXX += _T(", ");
+				m_combVol.GetWindowText(strTmp);
+				strTXXX += strTmp;
+				strTXXX += _T("dB Lower");
+			}
 		}
 	}
 
@@ -3931,7 +4015,7 @@ bool CPCMDSD_ConverterDlg::RequireWriteData(TCHAR *filepath, CString flag, wchar
 }
 
 ////Wavファイルを64bit Float(double)化し、LR分離して一時ファイルとして書き出し
-bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FILE *tmpl, FILE *tmpr, int DSD_Times, unsigned int *pTimes)
+bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FILE *tmpl, FILE *tmpr, int DSD_Times, unsigned int *pTimes, int number)
 {
 	FILE *wavread;
 	size_t ullFwRet;
@@ -3942,6 +4026,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	double dbL = 0;
 	double dbR = 0;
 	double dbLR = 0;
+	double ddbPeak = 0;
+	double dDiffdB = 0;
 	CString wav;
 
 	unsigned short chnum;
@@ -3954,17 +4040,35 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	int Times;
 	UINT64 samplesize = 0;
 
-	m_amp_peak[0] = 0;
-	m_amp_peak[1] = 0;
-	m_amp_sum[0] = 0;
-	m_amp_sum[1] = 0;
-	m_amp_sum_cnt[0] = 0;
-	m_amp_sum_cnt[1] = 0;
+//	stAmp.dAmpPeak[0] = 0;
+//	stAmp.dAmpPeak[1] = 0;
+	// 1トラック目？ ※[全て実行][実行]は必ずnumber=0で来る
+	if (number == 0){
+		// 振幅データ 初期化
+		stAmp.dAmpPeak[0] = 0;
+		stAmp.dAmpPeak[1] = 0;
+		stAmp.dAmpSum[0] = 0;
+		stAmp.dAmpSum[1] = 0;
+		stAmp.ullAmpSumCnt[0] = 0;
+		stAmp.ullAmpSumCnt[1] = 0;
+		m_dAvgPeakdB[0] = 0;
+		m_dAvgPeakdB[1] = 0;
+
+		// クリップエラーノーマライズ無効
+		m_ClipErrNormalizeEnable = 0;
+	}
+
+	// 振幅データピークデシベル初期化
+	stAmpPeakdB.dAmpPeak[0] = 0;
+	stAmpPeakdB.dAmpPeak[1] = 0;
+	stAmpPeakdB.dAmpSum[0] = 0;
+	stAmpPeakdB.dAmpSum[1] = 0;
+	stAmpPeakdB.ullAmpSumCnt[0] = 0;
+	stAmpPeakdB.ullAmpSumCnt[1] = 0;
+
 	m_AveragedB[0] = 0;
 	m_AveragedB[1] = 0;
 	m_AveragedB[2] = 0;
-	// クリップエラーノーマライズ無効
-	m_ClipErrNormalizeEnable = 0;
 
 	error = _tfopen_s(&wavread, filepath, _T("rb"));
 	if (error != 0) {
@@ -4265,14 +4369,14 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			buffer_int = buffer_int << (64 - bitdepth);
 			buffer_int = buffer_int >> (64 - bitdepth);
 			buffer_double = buffer_int / bit;
-			PcmAnalysis(buffer_double, 0);
+			PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
 			fwrite(&buffer_double, 8, 1, tmpl);
 
 			fread(&buffer_int, bitdepth / 8, 1, wavread);
 			buffer_int = buffer_int << (64 - bitdepth);
 			buffer_int = buffer_int >> (64 - bitdepth);
 			buffer_double = buffer_int / bit;
-			PcmAnalysis(buffer_double, 1);
+			PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
 			fwrite(&buffer_double, 8, 1, tmpr);
 		}
 		dbLR = GetAveragedB(&dbL, &dbR);
@@ -4287,6 +4391,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
 			ullSrcSheekPos = ullIdxSrc * nBlock;
 			if (ullSrcSheekPos >= samplesize) {
+				// 最後の1秒に満たなかった平均ピークデシベル算出
+				CalcPeakdB();
 				break;
 			}
 			_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
@@ -4301,7 +4407,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			buffer_int = buffer_int >> (64 - bitdepth);
 			buffer_double = buffer_int / bit;
 			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 0);
+			PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
 			ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
 			if(ullFwRet != 1){
 				fclose(wavread);
@@ -4317,7 +4423,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			buffer_int = buffer_int >> (64 - bitdepth);
 			buffer_double = buffer_int / bit;
 			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 1);
+			PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
 			ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
 			if(ullFwRet != 1){
 				fclose(wavread);
@@ -4354,6 +4460,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
 			ullSrcSheekPos = ullIdxSrc * nBlock;
 			if (ullSrcSheekPos >= samplesize) {
+				// 最後の1秒に満たなかった平均ピークデシベル算出
+				CalcPeakdB();
 				break;
 			}
 			_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
@@ -4363,7 +4471,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			ullSrcOffsetSheekPos += (bitbyte);
 			buffer_double = (double)buffer_float;
 			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 0);
+			PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
 			ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
 			if(ullFwRet != 1){
 				fclose(wavread);
@@ -4374,7 +4482,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			ullSrcOffsetSheekPos += (bitbyte);
 			buffer_double = (double)buffer_float;
 			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 1);
+			PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
 			ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
 			if(ullFwRet != 1){
 				fclose(wavread);
@@ -4408,6 +4516,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
 			ullSrcSheekPos = ullIdxSrc * nBlock;
 			if (ullSrcSheekPos >= samplesize) {
+				// 最後の1秒に満たなかった平均ピークデシベル算出
+				CalcPeakdB();
 				break;
 			}
 			_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
@@ -4416,7 +4526,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			fread(&buffer_double, bitbyte, 1, wavread);
 			ullSrcOffsetSheekPos += (bitbyte);
 			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 0);
+			PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
 			ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
 			if(ullFwRet != 1){
 				fclose(wavread);
@@ -4426,7 +4536,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			fread(&buffer_double, bitbyte, 1, wavread);
 			ullSrcOffsetSheekPos += (bitbyte);
 			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 1);
+			PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
 			ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
 			if(ullFwRet != 1){
 				fclose(wavread);
@@ -4444,17 +4554,28 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	m_AveragedB[0] = dbL;
 	m_AveragedB[1] = dbR;
 	m_AveragedB[2] = dbLR;
+	ddbPeak = GetAvgPeakdB();
+	m_dProgress.SetAveragedB(ddbPeak);
+
 	if(m_radioGainModeDdv == 0){
 		m_dGain = m_dVolGain;
 		TRACE("平均 %3.2fdB(L) %3.2fdB(R) %3.2fdB(L+R) ゲイン調整モード\n", dbL, dbR, dbLR);
 	} else {
 		// 制限dB差分 ※プラスの場合はゲイン調整は行わない
-		m_dGain = 1;
-		m_DiffdB = m_LimitdB - m_AveragedB[2];
-		if(m_DiffdB < 0){
+//		m_dGain = 1;
+//		m_DiffdB = m_LimitdB - m_AveragedB[2];
+//		dDiffdB = m_LimitdB - m_AveragedB[2];
+
+		m_DiffdB = m_LimitdB - ddbPeak;
+		if (m_DiffdB < 0) {
 			m_dGain = GetdBtoPower(m_DiffdB);
 		}
-		TRACE("平均 %3.2fdB(L) %3.2fdB(R) %3.2fdB(L+R) ゲイン制限モード:(%3.2fdB) - (%3.2fdB) = %3.2fdB差分\n", dbL, dbR, dbLR, m_LimitdB, dbLR, m_DiffdB);
+		// ゲイン調整の掛け合わせ
+		if(m_CrossGainLevel == 1){
+			m_dGain *= m_dVolGain;
+		}
+//		TRACE("平均 %3.2fdB(L) %3.2fdB(R) %3.2fdB(L+R) ゲイン制限モード:(%3.2fdB) - (%3.2fdB) = %3.2fdB差分\n", dbL, dbR, dbLR, m_LimitdB, dbLR, m_DiffdB);
+		TRACE("最大 %3.2fdB 平均 %3.2fdB(L) %3.2fdB(R) %3.2fdB(L+R) ゲイン制限モード:(%3.2fdB) - (%3.2fdB) = %3.2fdB差分\n", ddbPeak, dbL, dbR, dbLR, m_LimitdB, dbLR, m_DiffdB);
 	}
 
 	_fseeki64(tmpl, 0, SEEK_SET);
@@ -4465,10 +4586,9 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 }
 
 // 振幅を解析　戻り値：デシベル変換値 ※解析っていっても登録してるだけ
-double CPCMDSD_ConverterDlg::PcmAnalysis(double amp_value, int ch)
+void CPCMDSD_ConverterDlg::PcmAnalysis(double amp_value, int ch, int nPcmSamplingRate)
 {
 	double amp_value_tmp;
-	double db_val;
 
 	// 絶対値に変換
 	amp_value_tmp = fabs(amp_value);
@@ -4483,44 +4603,124 @@ double CPCMDSD_ConverterDlg::PcmAnalysis(double amp_value, int ch)
 #endif
 	}
 
-	// 振幅2乗積算
-	m_amp_sum[ch] += pow(amp_value_tmp,2);
-	m_amp_sum_cnt[ch] ++;
+	//*** 振幅データ ***
+	stAmp.dAmpSum[ch] += amp_value_tmp;
+	stAmp.ullAmpSumCnt[ch] ++;
 
 	// 振幅最大値
-	if(amp_value_tmp > m_amp_peak[ch]){
-		m_amp_peak[ch] = amp_value_tmp;
+	if(amp_value_tmp > stAmp.dAmpPeak[ch]){
+		stAmp.dAmpPeak[ch] = amp_value_tmp;
 	}
 
-	// 振幅0.0は、無限なので最小値未満は0に近い値とする
-	if (amp_value_tmp < DBL_EPSILON) {
-		amp_value_tmp = DBL_EPSILON;
+	//*** 振幅データピークデシベル ***
+	stAmpPeakdB.dAmpSum[ch] += amp_value_tmp;;
+	stAmpPeakdB.ullAmpSumCnt[ch] ++;
+
+	// 振幅最大値
+	if(amp_value_tmp > stAmpPeakdB.dAmpPeak[ch]){
+		stAmpPeakdB.dAmpPeak[ch] = amp_value_tmp;
 	}
 
-	db_val = 20 * log10(amp_value_tmp / 1);
+	// 1秒分積算?
+	if(nPcmSamplingRate == stAmpPeakdB.ullAmpSumCnt[ch]){
+		// 平均ピークデシベル算出
+		CalcPeakdB(ch);
+	}
+}
 
-	return db_val;
+// 振幅ピーク値取得 ※左右Chの大きい方
+double CPCMDSD_ConverterDlg::GetPeakAmp()
+{
+	double dAmp_peak;
+
+	// 左Ch、右Chの大きい方のピーク値を返却
+	dAmp_peak = stAmp.dAmpPeak[0];
+	if(stAmp.dAmpPeak[0] < stAmp.dAmpPeak[1]){
+		dAmp_peak = stAmp.dAmpPeak[1];
+	}
+
+	return dAmp_peak;
+}
+
+// 平均デシベルピーク取得 ※左右Chの大きい方
+double CPCMDSD_ConverterDlg::GetAvgPeakdB()
+{
+	double ddB_peak;
+
+	// 平均ピーク値 ※左右Chの大きい方
+	if(m_dAvgPeakdB[0] > m_dAvgPeakdB[1]){
+		ddB_peak = m_dAvgPeakdB[0];
+	} else {
+		ddB_peak = m_dAvgPeakdB[1];
+	}
+
+	return ddB_peak;
+}
+
+// 平均ピークデシベル算出
+void CPCMDSD_ConverterDlg::CalcPeakdB()
+{
+	// 左Ch
+	CalcPeakdB(0);
+	// 右Ch
+	CalcPeakdB(1);
+}
+
+void CPCMDSD_ConverterDlg::CalcPeakdB(int ch)
+{
+	double amp_avg;
+	double db;
+
+	if(stAmpPeakdB.ullAmpSumCnt[ch] == 0){
+		return;
+	}
+
+	// 平均
+	amp_avg = stAmpPeakdB.dAmpSum[ch] / (double)stAmpPeakdB.ullAmpSumCnt[ch];
+	if(amp_avg < DBL_EPSILON){
+		amp_avg = DBL_EPSILON;
+	}
+
+	// 平均RMS dB
+	db = GetPowertodB(amp_avg);
+
+	if(m_dAvgPeakdB[ch] == 0){
+		// 平均ピークdB初回
+		m_dAvgPeakdB[ch] = db;
+	} else {
+		if(m_dAvgPeakdB[ch] < db){
+			// 平均ピークdB更新
+			m_dAvgPeakdB[ch] = db;
+		}
+	}
+
+	// クリア
+	stAmpPeakdB.dAmpSum[ch] = 0;
+	stAmpPeakdB.ullAmpSumCnt[ch] = 0;
 }
 
 // 平均RMSデシベル取得
 double CPCMDSD_ConverterDlg::GetAveragedB(double *dbL, double *dbR)
 {
 	double amp_avg[2];
-	double square_root[2];
 	double db[2];
 	double db_ret;
 
 	// 平均
-	amp_avg[0] = m_amp_sum[0] / m_amp_sum_cnt[0];
-	amp_avg[1] = m_amp_sum[1] / m_amp_sum_cnt[1];
+	amp_avg[0] = (double)(stAmp.dAmpSum[0] / stAmp.ullAmpSumCnt[0]);
+	amp_avg[1] = (double)(stAmp.dAmpSum[1] / stAmp.ullAmpSumCnt[1]);
 
-	// 平方根
-	square_root[0] = sqrt(amp_avg[0]);
-	square_root[1] = sqrt(amp_avg[1]);
+	// 振幅0.0は、無限なので最小値未満は0に近い値とする
+	if (amp_avg[0] < DBL_EPSILON) {
+		amp_avg[0] = DBL_EPSILON;
+	}
+	if (amp_avg[1] < DBL_EPSILON) {
+		amp_avg[1] = DBL_EPSILON;
+	}
 
-	// RMS dB
-	db[0] = 20 * log10(square_root[0] / 1);
-	db[1] = 20 * log10(square_root[1] / 1);
+	// RMS dB ※20 × log10(amp ÷ 1.0)
+	db[0] = 20 * log10(amp_avg[0]);
+	db[1] = 20 * log10(amp_avg[1]);
 
 	if(dbL != NULL){
 		*dbL = db[0];
@@ -4531,6 +4731,14 @@ double CPCMDSD_ConverterDlg::GetAveragedB(double *dbL, double *dbR)
 
 	// 左右の平均dB
 	db_ret = (db[0] + db[1]) / 2.0;
+
+	// 平均ピークdB値 [0]:Ch L [1]:Ch R
+//	if(db[0] < m_dAvgPeakdB[0]){
+//		m_dAvgPeakdB[0] = db[0];
+//	}
+//	if(db[1] < m_dAvgPeakdB[1]){
+//		m_dAvgPeakdB[1] = db[1];
+//	}
 
 	return db_ret;
 }
@@ -4544,6 +4752,17 @@ double CPCMDSD_ConverterDlg::GetdBtoPower(double ddB)
 	dPower = pow(10, ddB / 20.0);
 
 	return dPower;
+}
+
+// 振幅からデシベル取得
+double CPCMDSD_ConverterDlg::GetPowertodB(double dAmpPower)
+{
+	double db;
+
+	// RMS dB
+	db = 20 * log10(dAmpPower / 1);
+
+	return db;
 }
 
 //FFTプラン初期化
@@ -4739,15 +4958,18 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, unsign
 	// 64BIT PCM読込みデータ数
 	UINT nReadCnt = datasize / Times;
 
-	deltagain = gain*FIR_DELTA_GAIN;
+#if GAIN_CONTROL_MODE
+	deltagain = gain * FIR_DELTA_GAIN;
+#else
 //	deltagain = gain * (0.5 - m_dGain);
-//	deltagain = gain * (m_dGain / 2);
-
+	deltagain = gain * (m_dGain / 2);
+#endif
 	// 左右同じ比率でノーマライズする為、またクリップオーバーしない為に左Ch、右Chの大きい方のピーク値を利用する
-	amp_peak = m_amp_peak[0];
-	if(m_amp_peak[0] < m_amp_peak[1]){
-		amp_peak = m_amp_peak[1];
-	}
+//	amp_peak = stAmp.dAmpPeak[0];
+//	if(stAmp.dAmpPeak[0] < stAmp.dAmpPeak[1]){
+//		amp_peak = stAmp.dAmpPeak[1];
+//	}
+	amp_peak = GetPeakAmp();
 	// ピーク値からノーマライズ乗算値を求める
 	normalizeratio = AMP_LIMIT_MAX / amp_peak;
 
@@ -4777,10 +4999,12 @@ bool CPCMDSD_ConverterDlg::WAV_Filter(FILE *UpSampleData, FILE *OrigData, unsign
 				buffer[j] *= normalizeratio;
 			}
 		}
+#if GAIN_CONTROL_MODE
 		// ゲイン
 		for(j = 0;j < nReadCnt;j ++){
 			buffer[j] *= m_dGain;
 		}
+#endif
 		for (t = 0; t < logtimes; t++){
 			q = 0;
 			for (p = 0; p < zerosize[t]; p++){
@@ -4963,10 +5187,13 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, u
 	double error_y = 0;
 
 
+#if GAIN_CONTROL_MODE
 //	double deltagain = Times / 2;
 	double deltagain = (Times / 2) * IIR_DELTA_GAIN;
+#else
 //	double deltagain = (Times / 2) * (1.0 - m_dGain);
-//	double deltagain = (Times / 2) * (m_dGain);
+	double deltagain = (Times / 2) * (m_dGain);
+#endif
 	double amp_peak;
 	double normalizeratio;
 
@@ -4974,10 +5201,11 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, u
 	size_t ullFwCount;
 
 	// 左右同じ比率でノーマライズする為、またクリップオーバーしない為に左Ch、右Chの大きい方のピーク値を利用する
-	amp_peak = m_amp_peak[0];
-	if(m_amp_peak[0] < m_amp_peak[1]){
-		amp_peak = m_amp_peak[1];
-	}
+//	amp_peak = stAmp.dAmpPeak[0];
+//	if(stAmp.dAmpPeak[0] < stAmp.dAmpPeak[1]){
+//		amp_peak = stAmp.dAmpPeak[1];
+//	}
+	amp_peak = GetPeakAmp();
 	// ピーク値からノーマライズ乗算値を求める
 	normalizeratio = AMP_LIMIT_MAX / amp_peak;
 
@@ -5213,6 +5441,38 @@ bool CPCMDSD_ConverterDlg::WAV_FilterLight(FILE *UpSampleData, FILE *OrigData, u
 	return bRet;
 }
 
+// 最終フォルダ名取得
+CString CPCMDSD_ConverterDlg::GetLastPath(TCHAR *filepath)
+{
+	TCHAR filename[_MAX_FNAME];
+	TCHAR fileext[_MAX_EXT];
+	TCHAR drive[_MAX_DRIVE];
+	TCHAR dir[_MAX_DIR];
+	CString strLastPathName;
+
+	_tsplitpath_s(filepath, drive, dir, filename, fileext);
+	strLastPathName = PathFindFileName(dir);
+
+	return strLastPathName;
+}
+
+// ファイル名取得
+CString CPCMDSD_ConverterDlg::GetFileName(TCHAR *filepath)
+{
+	TCHAR filename[_MAX_FNAME];
+	TCHAR fileext[_MAX_EXT];
+	TCHAR drive[_MAX_DRIVE];
+	TCHAR dir[_MAX_DIR];
+	CString strFileName;
+
+	_tsplitpath_s(filepath, drive, dir, filename, fileext);
+	CString tmp = PathFindFileName(dir);
+	strFileName = filename;
+	strFileName += fileext;
+
+	return strFileName;
+}
+
 //フリーズ防止のためにスレッド作成
 UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 {
@@ -5220,6 +5480,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 	int DSD_Times;
 //	TCHAR ext_tmp[MAX_PATH];
 	CString ext_tmp;
+	CString strFileName;
+	CString strFolderName;
 //	string *metadata = new string[6];
 	bool bDelFile = false;
 	BOOL bTagEnable = FALSE;
@@ -5299,6 +5561,7 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 	int nVolLimit = pDlg->m_combLimitVol.GetCurSel();
 	pDlg->m_LimitdB = (GAIN_LIMIT_DB_OFFSET + nVolLimit) * -1;
 	pDlg->m_DiffdB = 0;
+	pDlg->m_dGain = 1;
 
 	// ノーマライズ ※ゲイン調整のみ有効
 	if(pDlg->m_radioGainModeDdv == 0){
@@ -5338,6 +5601,7 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 			pDlg->SetAlbumAndAlbumArtistOutputDir(_T(""), _T(""), _T(""), _T(""));
 
 			_tcscpy_s(chkfile_tmp, pDlg->m_lFileList.GetItemText(n, EN_LIST_COLUMN_PATH));
+			strFileName = pDlg->GetFileName(chkfile_tmp);
 			ext_tmp = pDlg->m_lFileList.GetItemText(n, EN_LIST_COLUMN_EXT);
 			etExtType = pDlg->GetExtType(ext_tmp);
 
@@ -5346,7 +5610,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 //			if(_tcscmp(ext_tmp, _T("FLAC")) == 0){
 			if(etExtType == EXT_TYPE_FLAC){
 				// FLACならTAG取得、WAVにデコードしてから処理を開始
-				pDlg->m_dProgress.Start(chkfile_tmp);
+//				pDlg->m_dProgress.Start(chkfile_tmp);
+				pDlg->m_dProgress.Start(strFileName);
 				pDlg->m_dProgress.Process(0, 0, 100);
 				// TAG取得
 				pDlg->FLAC_Tagdata(chkfile_tmp, &pDlg->m_stFlacComm, &bTagEnable);
@@ -5360,7 +5625,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bDelFile = true;
 			} else if (etExtType == EXT_TYPE_ALAC){
 				// ALACならTAG取得、WAVにデコードしてから処理を開始
-				pDlg->m_dProgress.Start(chkfile_tmp);
+//				pDlg->m_dProgress.Start(chkfile_tmp);
+				pDlg->m_dProgress.Start(strFileName);
 				pDlg->m_dProgress.Process(5, 0, 100);
 				// TAG取得
 				pDlg->ALAC_Tagdata(chkfile_tmp, &pDlg->m_stFlacComm);
@@ -5398,7 +5664,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bFlacDecodeRet = true;
 				bDelFile = false;
 			}
-			pDlg->m_dProgress.Start(chkfile_tmp);
+//			pDlg->m_dProgress.Start(chkfile_tmp);
+			pDlg->m_dProgress.Start(strFileName);
 			if(etExtType == EXT_TYPE_DFF){
 				pDlg->m_dProgress.Process(4, 0, 100);
 			} else {
@@ -5406,6 +5673,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 			}
 			if (bFlacDecodeRet == true && pDlg->WAV_ConvertProc(etExtType, chkfile_tmp, runfile_tmp, n, bDelFile, bLastData, pDlg->m_dwConvertProcessFlag)) {
 				pDlg->m_lFileList.DeleteItem(n);
+				// リストコントロール登録件数表示
+				pDlg->ListRegistDisp();
 				nConvertCount ++;
 			} else {
 //				pDlg->MessageBox(_T("3"), _T("STEP"), MB_OK);
@@ -5491,18 +5760,25 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bLastData = true;
 			}
 			_tcscpy_s(chkfile_tmp, pDlg->m_lFileList.GetItemText(nConvertCount, EN_LIST_COLUMN_PATH));
+			strFolderName = pDlg->GetLastPath(chkfile_tmp);
+			strFileName = pDlg->GetFileName(chkfile_tmp);
+//			strFileName = chkfile_tmp;
 			ext_tmp = pDlg->m_lFileList.GetItemText(nConvertCount, EN_LIST_COLUMN_EXT);
 			etExtType = pDlg->GetExtType(ext_tmp);
 
 			// フルパスからディレクトリパスだけ取得
-			pDlg->m_strSrcAlbumPath = pDlg->GetDirectoryPath(chkfile_tmp);
+//			pDlg->m_strSrcAlbumPath = pDlg->GetDirectoryPath(chkfile_tmp);
+			pDlg->m_strSrcAlbumPath = pDlg->GetLastPath(chkfile_tmp);
 
 //			pDlg->m_dProgress.Start(chkfile_tmp);
 //			pDlg->m_dProgress.Process(0, 100);
+//			pDlg->m_dProgress.StartSeq(0, chkfile_tmp, nConvertCount, row_now - 1);
+			pDlg->m_dProgress.StartSeq(0, strFolderName, strFileName, nConvertCount, row_now - 1);
+
 //			if(_tcscmp(ext_tmp, _T("FLAC")) == 0){
 			if(etExtType == EXT_TYPE_FLAC){
 				// FLACならTAG取得、WAVにデコードしてから処理を開始
-				pDlg->m_dProgress.StartSeq(0, chkfile_tmp);
+//				pDlg->m_dProgress.StartSeq(0, chkfile_tmp, nConvertCount, row_now - 1);
 				pDlg->m_dProgress.Process(0, nConvertCount, row_now - 1);
 				// TAG取得
 				pDlg->FLAC_Tagdata(chkfile_tmp, &pDlg->m_stFlacComm, &bTagEnable);
@@ -5516,8 +5792,10 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bDelFile = true;
 			} else if (etExtType == EXT_TYPE_ALAC){
 				// ALACならTAG取得、WAVにデコードしてから処理を開始
-				pDlg->m_dProgress.Start(chkfile_tmp);
-				pDlg->m_dProgress.Process(5, 0, 100);
+//				pDlg->m_dProgress.Start(chkfile_tmp);
+//				pDlg->m_dProgress.Process(5, 0, 100);
+////				pDlg->m_dProgress.StartSeq(0, chkfile_tmp, nConvertCount, row_now - 1);
+				pDlg->m_dProgress.Process(5, nConvertCount, row_now - 1);
 				// TAG取得
 				pDlg->ALAC_Tagdata(chkfile_tmp, &pDlg->m_stFlacComm);
 				pDlg->m_nTagMode = pDlg->FlacTagToID3v2Tag(&pDlg->m_stFlacComm, &pDlg->m_stID3tag);
@@ -5555,14 +5833,15 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bFlacDecodeRet = true;
 				bDelFile = false;
 			}
-			pDlg->m_dProgress.StartSeq(0, chkfile_tmp);
+//			pDlg->m_dProgress.StartSeq(0, chkfile_tmp);
 			if(etExtType == EXT_TYPE_DFF){
+//				pDlg->m_dProgress.Start(chkfile_tmp);
+				pDlg->m_dProgress.Start(strFileName);
 				pDlg->m_dProgress.Process(4, 0, 100);
 			} else {
 				pDlg->m_dProgress.Process(1, nConvertCount, row_now - 1);
 			}
 			if (bFlacDecodeRet == true && pDlg->WAV_ConvertProc(etExtType, chkfile_tmp, runfile_tmp, nConvertCount, bDelFile, bLastData, pDlg->m_dwConvertProcessFlag)) {
-//				pDlg->m_lFileList.DeleteItem(i);
 				nConvertCount ++;
 				nConvertCountTotal ++;
 			}
@@ -5609,6 +5888,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				for (int i = 0; i < row_now; i++){
 					pDlg->m_lFileList.DeleteItem(0);
 				}
+				// リストコントロール登録件数表示
+				pDlg->ListRegistDisp();
 
 				pDlg->m_fillsize = 0;
 				pDlg->m_DSD_Times = 0;
@@ -5667,6 +5948,7 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 
 			iRow = pDlg->m_lFileList.GetNextSelectedItem(pos);
 			_tcscpy_s(chkfile_tmp, pDlg->m_lFileList.GetItemText(iRow - i, EN_LIST_COLUMN_PATH));
+			strFileName = pDlg->GetFileName(chkfile_tmp);
 			ext_tmp = pDlg->m_lFileList.GetItemText(iRow - i, EN_LIST_COLUMN_EXT);
 			etExtType = pDlg->GetExtType(ext_tmp);
 
@@ -5676,7 +5958,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 //			if(_tcscmp(ext_tmp, _T("FLAC")) == 0){
 			if(etExtType == EXT_TYPE_FLAC){
 				// FLACならTAG取得、WAVにデコードしてから処理を開始
-				pDlg->m_dProgress.Start(chkfile_tmp);
+//				pDlg->m_dProgress.Start(chkfile_tmp);
+				pDlg->m_dProgress.Start(strFileName);
 				pDlg->m_dProgress.Process(0, 0, 100);
 				// TAG取得
 				pDlg->FLAC_Tagdata(chkfile_tmp, &pDlg->m_stFlacComm, &bTagEnable);
@@ -5690,7 +5973,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bDelFile = true;
 			} else if (etExtType == EXT_TYPE_ALAC){
 				// ALACならTAG取得、WAVにデコードしてから処理を開始
-				pDlg->m_dProgress.Start(chkfile_tmp);
+//				pDlg->m_dProgress.Start(chkfile_tmp);
+				pDlg->m_dProgress.Start(strFileName);
 				pDlg->m_dProgress.Process(5, 0, 100);
 				// TAG取得
 				pDlg->ALAC_Tagdata(chkfile_tmp, &pDlg->m_stFlacComm);
@@ -5728,7 +6012,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bFlacDecodeRet = true;
 				bDelFile = false;
 			}
-			pDlg->m_dProgress.Start(chkfile_tmp);
+//			pDlg->m_dProgress.Start(chkfile_tmp);
+			pDlg->m_dProgress.Start(strFileName);
 			if(etExtType == EXT_TYPE_DFF){
 				pDlg->m_dProgress.Process(4, 0, 100);
 			} else {
@@ -5736,6 +6021,8 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 			}
 			if (bFlacDecodeRet == true && pDlg->WAV_ConvertProc(etExtType, chkfile_tmp, runfile_tmp, iRow - i, bDelFile)){
 				pDlg->m_lFileList.DeleteItem(iRow - i);
+				// リストコントロール登録件数表示
+				pDlg->ListRegistDisp();
 				nConvertCount ++;
 				i++;
 			}
@@ -6102,7 +6389,8 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(EXT_TYPE etExtType, TCHAR *orgfilepath, T
 #endif
 #if 1
 	// エンコーダー者をタグに設定
-	SetID3v2EncodedByTag(m_strEncodedBy, &m_stID3tag);
+//	SetID3v2EncodedByTag(m_strEncodedBy, &m_stID3tag);
+	SetID3v2EncodedByTag(m_evEncoderPerson, &m_stID3tag);
 #endif
 
 	//精度取得
@@ -6197,7 +6485,7 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(EXT_TYPE etExtType, TCHAR *orgfilepath, T
 		flag = false;
 	}
 //	if (flag)if (!TmpWriteData(filepath, tmpl, tmpr, DSD_TimesDes)){
-	if (flag)if (!TmpWriteData(etExtType, filepath, tmpl, tmpr, DSD_Times, &DSD_TimesDes)){
+	if (flag)if (!TmpWriteData(etExtType, filepath, tmpl, tmpr, DSD_Times, &DSD_TimesDes, number)){
 		if (m_dProgress.Cancelbottun == true) {
 			MessageBox(_T("ディスクに空きがありません。"), _T("処理完了"), MB_OK);
 		}
@@ -6397,7 +6685,8 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 #endif
 #if 1
 	// エンコーダー者をタグに設定
-	SetID3v2EncodedByTag(m_strEncodedBy, &m_stID3tag);
+//	SetID3v2EncodedByTag(m_strEncodedBy, &m_stID3tag);
+	SetID3v2EncodedByTag(m_evEncoderPerson, &m_stID3tag);
 #endif
 
 	//精度取得
@@ -6521,7 +6810,7 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 		flagr = false;
 		flag = false;
 	}
-	if (flag)if (!TmpWriteData(etExtType, filepath, tmpl, tmpr, DSD_Times, &DSD_TimesDes)){
+	if (flag)if (!TmpWriteData(etExtType, filepath, tmpl, tmpr, DSD_Times, &DSD_TimesDes, number)){
 		if (m_dProgress.Cancelbottun == true) {
 			MessageBox(_T("ディスクに空きがありません。"), _T("処理完了"), MB_OK);
 		}
@@ -6562,8 +6851,7 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 	}
 
 	//*** DSD変換処理 ***
-	m_dProgress.StartSeq(1, m_strSrcAlbumPath.GetBuffer());
-
+	m_dProgress.StartSeq(1, m_strSrcAlbumPath);
 	omp_lock_t myLock;
 	omp_init_lock(&myLock);
 #pragma omp parallel
@@ -6650,6 +6938,8 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 		int i;
 		int splitmax = (int)m_DataIdxArray.GetCount();
 		TCHAR *pDstFilePath;
+		CString strFolderName;
+		CString strFileName;
 
 		CString DSDName;
 		bool flagOrigl = true;
@@ -6673,8 +6963,12 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 			m_OrigDataSize = stDataIndex.iOrigDataSize;
 			m_nTagMode = stDataIndex.nTagMode;
 			m_stID3tag = stDataIndex.stID3tag;
+			strFolderName = GetLastPath(pDstFilePath);
+			strFileName = GetFileName(pDstFilePath);
 			TRACE(_T("No%d %d, %s\n"), i, m_OrigDataSize, pDstFilePath);
-			m_dProgress.StartSeq(0, pDstFilePath);
+//			m_dProgress.StartSeq(0, pDstFilePath);
+//			m_dProgress.StartSeq(1, _T(""), pDstFilePath, i, splitmax - 1);
+			m_dProgress.StartSeq(0, strFolderName, strFileName, i, splitmax - 1);
 			m_dProgress.Process(3, i, splitmax - 1);
 			if (!RequireWriteData(pDstFilePath, _T(".dsf"), L"wb", &tmpDSF, strDsfFile, m_DsfOverWriteEnable)){	// ファイル名にサフィックスを付与しない
 				TrushFile(filepathTmp, _T("_tmpLDSD"));
@@ -6741,7 +7035,8 @@ bool CPCMDSD_ConverterDlg::DFFtoDSFconvert(TCHAR *filepath)
 #endif
 #if 1
 	// エンコーダー者をタグに設定
-	SetID3v2EncodedByTag(m_strEncodedBy, &m_stID3tag);
+//	SetID3v2EncodedByTag(m_strEncodedBy, &m_stID3tag);
+	SetID3v2EncodedByTag(m_evEncoderPerson, &m_stID3tag);
 #endif
 #if 1
 	STDFFHEAD stDffHead;
@@ -6854,7 +7149,9 @@ bool CPCMDSD_ConverterDlg::FlacDecode(TCHAR *psrcfile, TCHAR *pdecodefile, int d
 			bRet = false;
 		}
 		fprintf(stderr, "decoding: %s\n", ok ? "succeeded" : "FAILED");
-		fprintf(stderr, "   state: %s\n", FLAC__StreamDecoderStateString[FLAC__stream_decoder_get_state(decoder)]);
+//		fprintf(stderr, "   state: %s\n", FLAC__StreamDecoderStateString[FLAC__stream_decoder_get_state(decoder)]);
+		fprintf(stderr, "   state: %s\n", FLAC__stream_decoder_get_resolved_state_string(decoder));
+		
 	}
 
 	delete filename_utf8;
@@ -6974,7 +7271,7 @@ void CPCMDSD_ConverterDlg::error_callback(const FLAC__StreamDecoder *decoder, FL
 {
 	(void)decoder, (void)client_data;
 
-	TRACE("Got error callback: %s\n", FLAC__StreamDecoderErrorStatusString[status]);
+//	TRACE("Got error callback: %s\n", FLAC__StreamDecoderErrorStatusString[status]);
 }
 
 // ALACデコード
@@ -7074,12 +7371,13 @@ void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName, BOOL bErrMsgEnable)
 		}
 	}
 	else {
-		TCHAR *errorMessage1 = FileName;
-		TCHAR *errorMessage2 = L"はwav/sony wave64/flac/alac/dffファイルではありません";
-		lstrcat(errorMessage1, errorMessage2);
-		if (bErrMsgEnable == TRUE) {
-			MessageBox(errorMessage1, L"wav/sony wave64/flac/alac/dffファイル読み込み失敗", MB_OK);
-		}
+		CString strErrFile;
+		CString strErrMsg;
+		strErrFile = FileName;
+		strErrMsg = "WAV_FileRead() 未対応ファイル:";
+		strErrMsg += strErrFile;
+		strErrMsg += "\n";
+		TRACE(strErrMsg);
 	}
 	delete[] metadata;
 }
@@ -7120,6 +7418,7 @@ void CPCMDSD_ConverterDlg::DirectoryFind(TCHAR *DirectoryPath){
 void CPCMDSD_ConverterDlg::OnDropFiles(HDROP hDropInfo)
 {
 	// TODO: ここにメッセージ ハンドラー コードを追加するか、既定の処理を呼び出します。
+#if FALSE	// DragQueryFileにバッファサイズを渡しているのでバッファーオーバーランしないはずだからどっちのロジック使っても問題ない気がする
 	TCHAR FileName[ABSOLUTE_PATH_MAX];
 	int NameSize = sizeof(FileName);
 	int FileNumber;
@@ -7138,6 +7437,35 @@ void CPCMDSD_ConverterDlg::OnDropFiles(HDROP hDropInfo)
 		}
 	}
 	CDialogEx::OnDropFiles(hDropInfo);
+#else
+	TCHAR* ptcFileName;
+	CString strInputPath;
+	int FileNumber;
+	int nLength;
+	int i;
+
+	// ファイル数取得
+	FileNumber = DragQueryFile(hDropInfo, 0xffffffff, NULL, 0);
+	for (i = 0; i < FileNumber; i++) {
+		// パスの長さ取得 ※NULL終端除く
+		nLength = DragQueryFile(hDropInfo, i, NULL, 0);
+		nLength += 1;
+		ptcFileName = new TCHAR[nLength];
+		ZeroMemory(ptcFileName, nLength);
+		// パス取得
+		DragQueryFile(hDropInfo, i, ptcFileName, nLength);
+		if (PathIsDirectory(ptcFileName)) {
+			DirectoryFind(ptcFileName);
+		} else {
+			WAV_FileRead(ptcFileName);
+		}
+		delete[] ptcFileName;
+	}
+#endif
+	// リストに追加があるなら全て実行ボタンをフォーカスする
+	if (m_lFileList.GetItemCount() > 0) {
+		m_bAllRun.SetFocus();
+	}
 }
 
 //処理中はボタンなど無効に
@@ -7165,8 +7493,9 @@ void CPCMDSD_ConverterDlg::Disable(){
 
 	m_chkboxFileOverWrite.EnableWindow(FALSE);
 	m_chkboxNormalize.EnableWindow(FALSE);
-	m_chkboxEnableDsd3MHz.EnableWindow(FALSE);
 	m_editAlbumTagSuffix.EnableWindow(FALSE);
+
+	m_editEncoderPerson.EnableWindow(FALSE);
 
 	m_ecPath.EnableWindow(FALSE);
 
@@ -7203,8 +7532,9 @@ void CPCMDSD_ConverterDlg::Enable(){
 
 	m_chkboxFileOverWrite.EnableWindow(TRUE);
 	m_chkboxNormalize.EnableWindow(TRUE);
-	m_chkboxEnableDsd3MHz.EnableWindow(TRUE);
 	m_editAlbumTagSuffix.EnableWindow(TRUE);
+
+	m_editEncoderPerson.EnableWindow(TRUE);
 
 	m_ecPath.EnableWindow(TRUE);
 
@@ -7465,17 +7795,24 @@ void CPCMDSD_ConverterDlg::OnBnClickedAlllistdelete()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
 	m_lFileList.DeleteAllItems();
+
+	// リストコントロール登録件数表示
+	ListRegistDisp();
 }
 
 //削除
 void CPCMDSD_ConverterDlg::OnBnClickedListdelete()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	// 選択行を削除
 	int iRow = m_lFileList.GetNextItem(-1, LVNI_ALL | LVNI_SELECTED);
 	while (iRow != -1){
 		m_lFileList.DeleteItem(iRow);
 		iRow = m_lFileList.GetNextItem(iRow - 1, LVNI_ALL | LVNI_SELECTED);
 	}
+
+	// リストコントロール登録件数表示
+	ListRegistDisp();
 }
 
 //参照,ここから丸パクリ http://www.jade.dti.ne.jp/~arino/sample6.htm
@@ -7701,13 +8038,23 @@ void CPCMDSD_ConverterDlg::LoadSafeWindowPos(RECT *prcWnd, INT *pnShowCmd)
 //		rcWnd = wndPlace.rcNormalPosition;
 		rcWnd = rcWndRestore;
 	}
-#if 0// サイズ固定ダイアログにした場合、チェックを有効にする事
-	// ダイアログサイズが破綻してないかチェック
-	if ((rcWndRestore.right - rcWndRestore.left) != (rcWnd.right - rcWnd.left) ||
-		(rcWndRestore.bottom - rcWndRestore.top) != (rcWnd.bottom - rcWnd.top)) {
-		rcWnd = rcWndRestore;
-	}
+
+	// ウィンドウスタイル取得
+#if 1
+	LONG lStyle;
+	lStyle = GetWindowLong(m_hWnd, GWL_STYLE);
+#else
+	LONG_PTR lStyle;
+	lStyle = GetWindowLongPtr(m_hWnd, GWL_STYLE);
 #endif
+	// 境界線がダイアログ枠(サイズ固定ダイアログ)？
+	if ((lStyle & (WS_CAPTION | DS_MODALFRAME)) == (WS_CAPTION | DS_MODALFRAME)) {
+		// ダイアログサイズが破綻してないかチェック
+		if ((rcWndRestore.right - rcWndRestore.left) != (rcWnd.right - rcWnd.left) ||
+			(rcWndRestore.bottom - rcWndRestore.top) != (rcWnd.bottom - rcWnd.top)) {
+			rcWnd = rcWndRestore;
+		}
+	}
 	RECT rcVirtualScreen;	// 仮想スクリーン座標
 	LONG marginLeft = 0;
 	LONG marginRight = 0;
@@ -7833,6 +8180,7 @@ void CPCMDSD_ConverterDlg::OnBnClickedCheckNormalize()
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
 //	m_NormalizeEnable = m_chkboxNormalize.GetCheck();
 	m_NormalizeFlag = m_chkboxNormalize.GetCheck();
+	GainModeGroupDisp();
 }
 
 
@@ -7842,13 +8190,6 @@ void CPCMDSD_ConverterDlg::OnBnClickedButtonPathClear()
 	// 出力先クリア
 	m_ecPath.SetWindowText(_T(""));
 	UpdateData(TRUE);
-}
-
-
-void CPCMDSD_ConverterDlg::OnBnClickedCheckDsd3mhzEnable()
-{
-	// TODO: ここにコントロール通知ハンドラー コードを追加します。
-	m_Pcm48KHzEnableDsd3MHzEnable = m_chkboxEnableDsd3MHz.GetCheck();
 }
 
 
@@ -7904,13 +8245,21 @@ void CPCMDSD_ConverterDlg::GainModeGroupDisp()
 	UpdateData();
 
 	if (m_radioGainModeDdv == 0) {
+		//*** ゲイン調整 ***
 		m_combVol.EnableWindow(TRUE);
 		m_chkboxNormalize.EnableWindow(TRUE);
 		m_combLimitVol.EnableWindow(FALSE);
+		m_chkboxCrossGainLevel.EnableWindow(FALSE);
 	} else {
-		m_combVol.EnableWindow(FALSE);
+		//*** ゲイン制限 ***
+		if(m_CrossGainLevel == 0){
+			m_combVol.EnableWindow(FALSE);
+		} else {
+			m_combVol.EnableWindow(TRUE);
+		}
 		m_chkboxNormalize.EnableWindow(FALSE);
 		m_combLimitVol.EnableWindow(TRUE);
+		m_chkboxCrossGainLevel.EnableWindow(TRUE);
 	}
 }
 
@@ -7926,3 +8275,76 @@ void CPCMDSD_ConverterDlg::OnBnClickedRadioGainMode2()
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
 	GainModeGroupDisp();
 }
+
+
+void CPCMDSD_ConverterDlg::OnBnClickedCheckCrossGainlevel()
+{
+	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	m_CrossGainLevel = m_chkboxCrossGainLevel.GetCheck();
+	GainModeGroupDisp();
+}
+
+void CPCMDSD_ConverterDlg::OnBnClickedButtonSetting()
+{
+	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	CAutoSettingDlg dlg;
+	INT_PTR dlgRet;
+
+	// 現在の設定をAUTO設定ダイアログに反映
+	dlg.DsdCombBoxSetCurSel(m_nDsdSampling44100,
+							m_nDsdSampling88200,
+							m_nDsdSampling176400,
+							m_nDsdSampling352800,
+							m_nDsdSampling705600,
+							m_Pcm48KHzEnableDsd3MHzEnable);
+	// AUTO設定ダイアログ表示
+	dlgRet = dlg.DoModal();
+	if(dlgRet == IDOK){
+		// OKボタンなら設定内容を反映
+		dlg.DsdCombBoxGetDsdSamplingRate(	&m_nDsdSampling44100,
+											&m_nDsdSampling88200,
+											&m_nDsdSampling176400,
+											&m_nDsdSampling352800,
+											&m_nDsdSampling705600,
+											&m_Pcm48KHzEnableDsd3MHzEnable);
+	}
+}
+
+
+// DSDサンプリングレートがAUTOなら設定ボタンを有効、AUTO以外の固定なら無効にする
+void CPCMDSD_ConverterDlg::AutoSettingBtnEnableProc()
+{
+	int idx;
+	BOOL bState;
+
+	idx = m_cSamplingRate.GetCurSel();
+	if (idx == 0) {
+		// AUTOを選択中
+		bState = TRUE;
+	} else {
+		// AUTO以外を選択中
+		bState = FALSE;
+	}
+
+	m_btnAutSetting.EnableWindow(bState);
+}
+
+void CPCMDSD_ConverterDlg::OnCbnSelchangeSamplingrate()
+{
+	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	AutoSettingBtnEnableProc();
+}
+
+
+void CPCMDSD_ConverterDlg::OnLvnInsertitemFilelist(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	LPNMLISTVIEW pNMLV = reinterpret_cast<LPNMLISTVIEW>(pNMHDR);
+	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+
+	// リストコントロール登録件数表示
+	ListRegistDisp();
+
+	*pResult = 0;
+}
+
+

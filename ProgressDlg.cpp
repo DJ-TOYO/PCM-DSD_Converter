@@ -66,14 +66,22 @@ void ProgressDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_PATHTEXT, m_ecTEXT);
 	DDX_Control(pDX, IDC_EDIT2, m_ecTimes);
 	DDX_Control(pDX, IDC_CancelBottun, m_btnStop);
+	DDX_Control(pDX, IDC_STATIC_PROGRESS, m_scProgressVal);
 }
 
 //子ダイアログでのパス名表示
-void ProgressDlg::Start(TCHAR *Path){
+//void ProgressDlg::Start(TCHAR *Path)
+void ProgressDlg::Start(CString strPath)
+{
 	CString strMsg;
-	strMsg = Path;
+//	strMsg = Path;
+	strMsg = strPath;
 //	strMsg += L"をDSDに変換中";
 	m_ecTEXT.SetWindowText(strMsg);
+	m_strSrcPath = strMsg;
+	m_scProgressVal.SetWindowText(_T(""));
+
+	m_bAlbumMode = FALSE;
 
 	m_pProgress.SetRange32(0, 100);
 	m_pProgress.SetPos(0);
@@ -84,43 +92,64 @@ void ProgressDlg::Start(TCHAR *Path){
 	m_btnStop.EnableWindow(TRUE);
 }
 
-void ProgressDlg::StartSeq(unsigned int state, CString strText)
+void ProgressDlg::StartSeq(unsigned int state, CString strFolder)
+{
+	StartSeq(state, strFolder, _T(""), 0, 100);
+}
+
+void ProgressDlg::StartSeq(unsigned int state, CString strFolder, CString strFileName, unsigned int percent, unsigned int position)
 {
 	CString strMsg;
+
+	strMsg = _T("[");
+	strMsg += strFolder;
+	strMsg += _T("]");
+	strMsg += _T("フォルダ");
+
 	switch(state){
 		case 0:
-			strMsg = strText;
+			strMsg += _T("\r\n");
+			strMsg += strFileName;
 			break;
 		case 1:
-			strMsg = "[";
-			strMsg += strText;
-			strMsg += "]";
-	//		strMsg += L"\nフォルダをアルバムモードでDSDに変換中";
-			strMsg += L"\nフォルダ";
 			break;
 		default:
 			break;
 	}
 
-	m_ptrTaskbarList3->SetProgressState(m_pParent->m_hWnd, TBPF_NORMAL);
-	m_pProgress.SetRange32(0, 100);
-	m_pProgress.SetPos(0);
-
-	m_ptrTaskbarList3->SetProgressValue(m_pParent->m_hWnd, 0, 100);
-
-	m_PercentLatest = 0;
+	m_bAlbumMode = TRUE;
 
 	m_btnStop.EnableWindow(TRUE);
 	m_ecTEXT.SetWindowText(strMsg);
+	m_strSrcPath = strMsg;
+
+	if(percent > 0){
+		return;
+	}
+
+	m_scProgressVal.SetWindowText(_T(""));
+
+	m_ptrTaskbarList3->SetProgressState(m_pParent->m_hWnd, TBPF_NORMAL);
+	m_pProgress.SetRange32(0, position);
+	m_pProgress.SetPos(percent);
+
+	m_ptrTaskbarList3->SetProgressValue(m_pParent->m_hWnd, percent, position);
+
+	m_PercentLatest = 0;
+	m_nProgressVal = -1;
 }
 
 //プログレスバー管理
 void ProgressDlg::Process(unsigned int state, unsigned int percent, unsigned int position, unsigned int nDSDrate)
 {
 	CString strMsg;
+	CString strTmp;
+	double dProgressVal;
+	int nProgressVal;
+
 	m_pProgress.SetRange32(0, position);
 
-	if(state != 2){
+	if(state != 2 && state != 3 && state != 4 && m_bAlbumMode == FALSE){
 		m_pProgress.SetPos(percent);
 		m_ptrTaskbarList3->SetProgressValue(m_pParent->m_hWnd, percent, position);
 	} else {
@@ -136,17 +165,31 @@ void ProgressDlg::Process(unsigned int state, unsigned int percent, unsigned int
 			SetWindowText(_T("DSD変換中(STEP 1/3)"));
 			strMsg = L"アップサンプリングの準備中(FLACをデコード中)";
 			m_ecTimes.SetWindowText(strMsg);
+			m_scProgressVal.SetWindowText(_T(""));
 			break;
 		case 1:
 			SetWindowText(_T("DSD変換中(STEP 1/3)"));
 			strMsg = L"アップサンプリングの準備中";
 			m_ecTimes.SetWindowText(strMsg);
+			m_scProgressVal.SetWindowText(_T(""));
 			break;
 		case 2:
 			if (percent == 1) {
 				SetWindowText(_T("DSD変換中(STEP 2/3)"));
 				strMsg.Format(_T("DSD%dに変換中"), nDSDrate);
+//				strMsg.Format(_T("DSD%dに変換中(%0.2fdB)"), nDSDrate, m_dAvgdB);
 				m_ecTimes.SetWindowText(strMsg);
+				strMsg = m_strSrcPath;
+				strTmp.Format(_T("(%0.2fdB)"), m_dAvgdB);
+				strMsg += strTmp;
+				m_ecTEXT.SetWindowText(strMsg);
+			}
+			dProgressVal = (double)(100.0 / position) * m_PercentLatest;
+			nProgressVal = (int)dProgressVal;
+			if(m_nProgressVal != nProgressVal){
+				m_nProgressVal = nProgressVal;
+				strMsg.Format(_T("%d%%"), nProgressVal);
+				m_scProgressVal.SetWindowText(strMsg);
 			}
 			break;
 		case 3:
@@ -156,9 +199,18 @@ void ProgressDlg::Process(unsigned int state, unsigned int percent, unsigned int
 			m_btnStop.EnableWindow(FALSE);
 			break;
 		case 4:
-			SetWindowText(_T("DFF to DSF変換中"));
-			strMsg = L"DSFファイルに出力中";
-			m_ecTimes.SetWindowText(strMsg);
+			if(percent == 0){
+				SetWindowText(_T("DFF to DSF変換中"));
+				strMsg = L"DSFファイルに出力中";
+				m_ecTimes.SetWindowText(strMsg);
+			}
+			dProgressVal = (double)(100.0 / position) * m_PercentLatest;
+			nProgressVal = (int)dProgressVal;
+			if (m_nProgressVal != nProgressVal) {
+				m_nProgressVal = nProgressVal;
+				strMsg.Format(_T("%d%%"), nProgressVal);
+				m_scProgressVal.SetWindowText(strMsg);
+			}
 			break;
 		case 5:
 			SetWindowText(_T("DSD変換中(STEP 1/3)"));
@@ -168,6 +220,11 @@ void ProgressDlg::Process(unsigned int state, unsigned int percent, unsigned int
 		default:
 			break;
 	}
+}
+
+void ProgressDlg::SetAveragedB(double dVal)
+{
+	m_dAvgdB = dVal;
 }
 
 BEGIN_MESSAGE_MAP(ProgressDlg, CDialogEx)
