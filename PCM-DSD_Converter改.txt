@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
-                             - PCM-DSD Converter 改 Ver1.09 -
+                             - PCM-DSD Converter 改 Ver1.10 -
 --------------------------------------------------------------------------------
-                                                              DJ TOYO 2023/5/15
+                                                              DJ TOYO 2023/5/19
 【はじめに】
 
 「PCM-DSD_Converter改」はserieril氏作DSD変換ソフト「PCM-DSD_Converter V1.0.0.11」をベースに
@@ -328,7 +328,7 @@
 
 ・FLACライブラリ
   以下のVerをビルドした物を使用
-  ・FLAC Ver1.3.4 Windows版
+  ・FLAC Ver1.4.2 Windows版
   ・Ogg Vorbis(libogg Ver1.3.5)
 
 ・ALACライブラリ
@@ -431,11 +431,11 @@ IEEE浮動小数点の規格として、
 開発ツール    ：Visual Studio Community 2022
                 PCM-DSD_Converter Ver1.0.0.11
                 libfftw3-3 Ver3.3.10
-                libFlac Ver1.3.4 Windows版
+                libFlac Ver1.4.2 Windows版
                 libogg Ver1.3.5
                 Apple Lossless Audio Codec
                 Freeware Advanced Audio (AAC) Decoder 2
-タグ編集ソフト：「STEP_K Ver1.05a」「STEP_J Ver1.02」「MP3Tag」「Sony Music Center for PC」など
+タグ編集ソフト：「STEP_K Ver1.05a」「STEP_J Ver1.04」「MP3Tag」「Sony Music Center for PC」など
 再生ソフト    ：「Sony Music Center for PC」「KbMedia Player」など
 プレーヤー    ：SONY Walkman NW-ZX507/NW-WM1AM2
 
@@ -593,7 +593,12 @@ Visual Studio2010用のビルド環境がありましたので、
 http://www.fftw.org/
 http://www.fftw.org/install/windows.html
 
-・FLAC(FLAC - Free Lossless Audio Codec)  ※Ver1.3.4 Windows版
+・CMake
+FLACのビルド行うにはFLAC 1.4.0以降からCMakeが必要になりました。
+CMakeでVisualStudioビルド構築を行う行います。
+https://cmake.org/
+
+・FLAC(FLAC - Free Lossless Audio Codec)
 FLACのライブラリ
 https://xiph.org/flac/
 https://ftp.osuosl.org/pub/xiph/releases/flac/
@@ -651,10 +656,20 @@ https://visualstudio.microsoft.com/ja/downloads/#other-ja-family
 
 【連絡】
   不具合、要望などご意見ございましたら
-  対応出来るか分かりませんがGitHubのissueに投稿下さい。
+  対応出来るか分かりませんが下記にて連絡下さい。
+
+  TOYOのブログ ※アメーバブログ
+  https://ameblo.jp/dj-toyo/
+
+  GitHubのissueに投稿下さい。
+  https://github.com/DJ-TOYO/PCM-DSD_Converter
+
 
 
 【履歴】
+  Ver1.10	2023/5/19
+  ・FLAC Ver1.4.2に差し替え
+
   Ver1.09	2023/5/15
   ・iniファイルの直接変更が必要だった機能は一部を除いて全て画面から変更が行えるようにした。
     ・サンプリングレートAUTOの設定画面を追加して変換するDSDサンプリングレートを選択出来るようにした。
