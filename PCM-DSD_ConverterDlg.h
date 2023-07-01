@@ -493,6 +493,8 @@ public:
 	CString GetDirectoryPath(TCHAR *pstrText);
 	// アルバム実行アルバムファイル数取得
 	int GetAlbumCount();
+	// DSDサンプリングレート選択から変換DSD取得
+	unsigned int GetDsdSamplingrateComboBoxToDsdTimes(int nSamplePerSec);
 	//処理中はボタンなど無効に
 	void Disable();
 	//処理が終わったらボタンなど有効化

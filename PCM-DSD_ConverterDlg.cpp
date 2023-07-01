@@ -79,9 +79,10 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 
 	m_bWindowMonitorBorder = FALSE;
 
+#if 0	// FLAC 1.4.0以降から廃止になったと思わる為コメント※FLAC1.3.4まではこれがないと文字化けする。
 	// FLAC のファイルをutf8モードにする
 	flac_set_utf8_filenames(true);
-
+#endif
 	CString strIniFile;
 	TCHAR Path[MAX_PATH + 1];
 	TCHAR drive[MAX_PATH + 1];
@@ -6333,6 +6334,42 @@ int CPCMDSD_ConverterDlg::GetAlbumCount()
 	return nRetCnt;
 }
 
+// DSDサンプリングレート選択から変換DSD取得
+unsigned int CPCMDSD_ConverterDlg::GetDsdSamplingrateComboBoxToDsdTimes(int nSamplePerSec)
+{
+	unsigned int nDSD_Times;							// DSD変換倍数
+
+	// コンボボックスの選択？
+	switch(m_DSDsamplingRateCurSel){
+		case 0:											// AUTO
+			nDSD_Times = GeDsdTimesWithtSamplePerSec(nSamplePerSec);
+			break;
+		case 1:											// DSD 64(2.8MHz)
+			nDSD_Times = 64;
+			break;
+		case 2:											// DSD128(5.6MHz)
+			nDSD_Times = 128;
+			break;
+		case 3:											// DSD256(11.2MHz)
+			nDSD_Times = 256;
+			break;
+		case 4:											// DSD512(22.5MHz)
+			nDSD_Times = 512;
+			break;
+		case 5:											// DSD1024(45.1MHz)
+			nDSD_Times = 1024;
+			break;
+		case 6:											// DSD2048(90.3MHz)
+			nDSD_Times = 2048;
+			break;
+		default:
+			nDSD_Times = 64;
+			break;
+	}
+
+	return nDSD_Times;
+}
+
 //PCM-DSD変換の管理
 bool CPCMDSD_ConverterDlg::WAV_ConvertProc(EXT_TYPE etExtType, TCHAR *orgfilepath, TCHAR *filepath, int number, bool bDelWavFile, bool bLastDataFlag, int mode)
 {
@@ -6432,41 +6469,10 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(EXT_TYPE etExtType, TCHAR *orgfilepath, T
 		GeyWavSamplePerSec(filepath, &nSamplePerSec);
 	}
 
-	switch(m_DSDsamplingRateCurSel){
-		case 0:											// AUTO
-			m_DSD_Times = GeDsdTimesWithtSamplePerSec(nSamplePerSec);
-			break;
-		case 1:											// DSD 64(2.8MHz)
-			m_DSD_Times = 64;
-//			DSD_Times = 6;
-			break;
-		case 2:											// DSD128(5.6MHz)
-			m_DSD_Times = 128;
-//			DSD_Times = 7;
-			break;
-		case 3:											// DSD256(11.2MHz)
-			m_DSD_Times = 256;
-//			DSD_Times = 8;
-			break;
-		case 4:											// DSD512(22.5MHz)
-			m_DSD_Times = 512;
-//			DSD_Times = 9;
-			break;
-		case 5:											// DSD1024(45.1MHz)
-			m_DSD_Times = 1024;
-//			DSD_Times = 10;
-			break;
-		case 6:											// DSD2048(90.3MHz)
-			m_DSD_Times = 2048;
-//			DSD_Times = 11;
-			break;
-		default:
-			m_DSD_Times = 64;
-//			DSD_Times = 6;
-			break;
-	}
-
+	// DSDサンプリングレート選択から変換DSD取得
+	m_DSD_Times = GetDsdSamplingrateComboBoxToDsdTimes(nSamplePerSec);
 	DSD_Times = m_DSD_Times;
+
 	m_fillsize = 0;
 #endif
 	unsigned int DSD_TimesDes = 0;
@@ -6710,31 +6716,8 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 			GeyWavSamplePerSec(filepath, &nSamplePerSec);
 		}
 
-		switch(m_DSDsamplingRateCurSel){
-			case 0:											// AUTO
-				m_DSD_Times = GeDsdTimesWithtSamplePerSec(nSamplePerSec);
-				break;
-			case 1:											// DSD 64(2.8MHz)
-				m_DSD_Times = 64;
-				break;
-			case 2:											// DSD128(5.6MHz)
-				m_DSD_Times = 128;
-				break;
-			case 3:											// DSD256(11.2MHz)
-				m_DSD_Times = 256;
-				break;
-			case 4:											// DSD512(22.5MHz)
-				m_DSD_Times = 512;
-				break;
-			case 5:											// DSD1024(45.1MHz)
-				m_DSD_Times = 1024;
-				break;
-			case 6:											// DSD2048(90.3MHz)
-				m_DSD_Times = 2048;
-			default:
-				m_DSD_Times = 64;
-				break;
-		}
+		// DSDサンプリングレート選択から変換DSD取得
+		m_DSD_Times = GetDsdSamplingrateComboBoxToDsdTimes(nSamplePerSec);
 	}
 
 	DSD_Times = m_DSD_Times;
