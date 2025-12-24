@@ -130,6 +130,7 @@
       <PreprocessorDefinitions>_WINDOWS;_DEBUG;FLAC__NO_DLL;USE_TAGGING;__x86_64__;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
       <AdditionalIncludeDirectories>.\FLAC\include;.\ALAC\codec;.\FAAD2;.\mp3infp;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

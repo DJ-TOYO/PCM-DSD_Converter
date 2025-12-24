@@ -17,6 +17,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <mmsystem.h>
+#include <filesystem>
+
+#include "bw64/bw64.hpp"	// libbw64 - ITU-R BS.2088 Library ※hppのみで動作可能なライブラリ
 
 #pragma comment(lib, "version.lib")
 //#ifdef _DEBUG
@@ -920,7 +923,7 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata, int 
 		}
 	}
 
-	//fmtIDでFloatInt判別
+	//fmtIDでFloat/Int判別
 	_fseeki64(fprwav, 4, SEEK_CUR);
 	fread(&fmtID, 2, 1, fprwav);
 	if (fmtID == WAVE_FORMAT_IEEE_FLOAT){
@@ -1022,7 +1025,7 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata, int 
 	metadata[EN_LIST_COLUMN_ALBUM_ARTIST] = stFlacComm.strAlbumArtist;
 
 	FlacCommentInit(&stFlacComm, 0);
-	
+
 	return true;
 }
 
@@ -1212,6 +1215,118 @@ bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR *filepath, CString *metadata, i
 	metadata[EN_LIST_COLUMN_EXT] = _T("W64");
 
 	return true;
+}
+
+// RF64サンプリングレート取得
+bool CPCMDSD_ConverterDlg::GeyRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec)
+{
+	bool bRet;
+
+	CString* metadata = new CString[EN_LIST_COLUMN_MAX];
+	bRet = Rf64_Metadata(filepath, metadata, pnSamplePerSec);
+	delete[] metadata;
+
+	return bRet;
+}
+
+bool CPCMDSD_ConverterDlg::Rf64_Metadata(TCHAR* filepath, CString* metadata)
+{
+	int nSamplePerSec = 0;
+	bool bRet;
+
+	bRet = Rf64_Metadata(filepath, metadata, &nSamplePerSec);
+
+	return bRet;
+}
+
+bool CPCMDSD_ConverterDlg::Rf64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec)
+{
+	// パス分解
+	TCHAR filename[_MAX_FNAME];
+	TCHAR fileext[_MAX_EXT];
+	TCHAR drive[_MAX_DRIVE];
+	TCHAR dir[_MAX_DIR];
+
+	_tsplitpath_s(filepath, drive, dir, filename, fileext);
+
+	metadata[EN_LIST_COLUMN_PATH] = filepath;
+	metadata[EN_LIST_COLUMN_FILE_NAME] = filename;
+
+	// 拡張子チェック
+	CString strExt(fileext);
+	strExt.MakeUpper();
+	if (strExt != _T(".RF64")) {
+		return false;
+	}
+
+	try {
+		// libbw64でファイルを開く
+		std::shared_ptr<bw64::Bw64Reader> reader  = bw64::readFile(std::filesystem::path(filepath).string());
+
+		unsigned int    samplingrate = reader->sampleRate();
+		unsigned short  bitdepth = reader->bitDepth();
+		unsigned short  chnum = reader->channels();
+		uint64_t        totalSamples = reader->numberOfFrames();
+		uint16_t        fmtTag = reader->formatTag();
+
+		if (pnSamplePerSec != nullptr) {
+			*pnSamplePerSec = (int)samplingrate;
+		}
+
+		// サンプリングレート
+		CString strTmp;
+		strTmp.Format(_T("%d"), samplingrate);
+		metadata[EN_LIST_COLUMN_SAMPLING_RATE] = strTmp;
+
+		// ビット深度
+		CString strBit;
+		if (fmtTag == WAVE_FORMAT_IEEE_FLOAT) {
+			strBit = _T("bit Float");
+		}
+		else if (fmtTag == WAVE_FORMAT_PCM) {
+			strBit = _T("bit Int");
+		}
+		else {
+			strBit = _T("Unknown format");
+		}
+		strTmp.Format(_T("%d"), bitdepth);
+		metadata[EN_LIST_COLUMN_BIT] = strTmp + strBit;
+
+		// 再生時間
+		INT64 nPlayTimeSec = totalSamples / samplingrate;
+		CString strPlayTime;
+		strPlayTime.Format(_T("%3I64d:%02I64d"), nPlayTimeSec / 60, nPlayTimeSec % 60);
+		metadata[EN_LIST_COLUMN_LENGTH] = strPlayTime;
+
+		// サンプル数
+		strTmp.Format(_T("%llu"), totalSamples / chnum);
+		metadata[EN_LIST_COLUMN_SAMPLING_COUNT] = strTmp;
+
+		// 拡張子
+		metadata[EN_LIST_COLUMN_EXT] = _T("RF64");
+
+		STFLAC_COMMENT stFlacComm;		// FLAC COMMENT
+		BOOL bTagEnable = FALSE;
+
+		FlacCommentInit(&stFlacComm, 1);
+		WAV_Tagdata(filepath, &stFlacComm, &bTagEnable);
+
+		metadata[EN_LIST_COLUMN_TRACK_NO] = stFlacComm.strTracknumber;
+		metadata[EN_LIST_COLUMN_TITLE] = stFlacComm.strTitle;
+		metadata[EN_LIST_COLUMN_ARTIST] = stFlacComm.strArtist;
+		metadata[EN_LIST_COLUMN_ALBUM] = stFlacComm.strAlbum;
+		metadata[EN_LIST_COLUMN_DISC_NO] = stFlacComm.strDiscnumber;
+		metadata[EN_LIST_COLUMN_DISC_TOTAL] = stFlacComm.strDisctotal;
+		metadata[EN_LIST_COLUMN_ALBUM_ARTIST] = stFlacComm.strAlbumArtist;
+
+		FlacCommentInit(&stFlacComm, 0);
+
+		return true;
+	}
+	catch (std::exception& e) {
+		TRACE(_T("Rf64_Metadata() 例外: %S\n"), e.what());
+		return false;
+	}
 }
 
 //FLACファイルチェック及びメタデータ読み取り
@@ -4023,7 +4138,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 
 	errno_t error;
 	bool flag = true;
-	bool floatint = true;
+	bool floatint = true;		// 変数名が宜しくない。trueがWAVE_FORMAT_PCM(intデータ)、falseがWAVE_FORMAT_IEEE_FLOAT(FLOATデータ)。というかfmtIDをそのまま持てばよい
 	double dbL = 0;
 	double dbR = 0;
 	double dbLR = 0;
@@ -4091,7 +4206,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 
 	LONGLONG llOff;
 
-	if (etExtType != EXT_TYPE_WAVE64){
+	if (etExtType == EXT_TYPE_WAV){
 		// WAV
 		while (flag){
 			if (feof(wavread)){
@@ -4110,13 +4225,12 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 				}
 			}
 		}
-		//fmtIDでFloatInt判別
+		//fmtIDでFloat/Int判別
 		_fseeki64(wavread, 4, SEEK_CUR);
 		fread(&fmtID, 2, 1, wavread);
-		if (fmtID == 3){
+		if (fmtID == WAVE_FORMAT_IEEE_FLOAT){
 			floatint = false;
-		}
-		else{
+		} else{
 			floatint = true;
 		}
 
@@ -4146,73 +4260,74 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			}
 		}
 		fread(&samplesize, 4, 1, wavread);
-	} else {
+	} else if (etExtType == EXT_TYPE_WAVE64) {
 		// SONY WAVE64
 		// RIFFチャンク
 		fread(&stW64ChunkRiff, sizeof(stW64ChunkRiff), 1, wavread);
-//		fileObj.Read(&stW64ChunkRiff, sizeof(stW64ChunkRiff));
+		//		fileObj.Read(&stW64ChunkRiff, sizeof(stW64ChunkRiff));
 		if (stW64ChunkRiff.Guid != s_GUID[W64_RIFF]) {
 			return false;
 		}
 
 		// WAVEチャンク
 		fread(&guidWave, sizeof(guidWave), 1, wavread);
-//		fileObj.Read(&guidWave, sizeof(guidWave));
+		//		fileObj.Read(&guidWave, sizeof(guidWave));
 		if (guidWave != s_GUID[W64_WAVE]) {
 			return false;
 		}
 
 		// fmtチャンク
 		fread(&stW64Chunkfmt, sizeof(stW64Chunkfmt), 1, wavread);
-//		fileObj.Read(&stW64Chunkfmt, sizeof(stW64Chunkfmt));
+		//		fileObj.Read(&stW64Chunkfmt, sizeof(stW64Chunkfmt));
 		if (stW64Chunkfmt.Guid != s_GUID[W64_FMT]) {
 			return false;
 		}
 		fread(&w64fmt, sizeof(w64fmt), 1, wavread);
-//		fileObj.Read(&w64fmt, sizeof(w64fmt));
+		//		fileObj.Read(&w64fmt, sizeof(w64fmt));
 
-		switch(w64fmt.wf.wFormatTag){
-			case WAVE_FORMAT_PCM:
-				samplingrate = w64fmt.wf.nSamplesPerSec;
-				bitdepth = w64fmt.wBitsPerSample;
-				chnum = w64fmt.wf.nChannels;
-				nBlockAlign = w64fmt.wf.nBlockAlign;
+		switch (w64fmt.wf.wFormatTag) {
+		case WAVE_FORMAT_PCM:
+			samplingrate = w64fmt.wf.nSamplesPerSec;
+			bitdepth = w64fmt.wBitsPerSample;
+			chnum = w64fmt.wf.nChannels;
+			nBlockAlign = w64fmt.wf.nBlockAlign;
+			floatint = true;
+			break;
+		case WAVE_FORMAT_IEEE_FLOAT:
+			samplingrate = w64fmt.wf.nSamplesPerSec;
+			bitdepth = w64fmt.wBitsPerSample;
+			chnum = w64fmt.wf.nChannels;
+			nBlockAlign = w64fmt.wf.nBlockAlign;
+			floatint = false;
+			break;
+		case WAVE_FORMAT_EXTENSIBLE:
+			llOff = sizeof(w64fmt) * -1;
+			//				fileObj.Seek(llOff, CFile::current);
+			_fseeki64(wavread, llOff, SEEK_CUR);
+			//				fileObj.Read(&stWaveFormatExt, sizeof(stWaveFormatExt));
+			fread(&stWaveFormatExt, sizeof(stWaveFormatExt), 1, wavread);
+			SubFormatGUID = (GUID)stWaveFormatExt.SubFormat;
+			if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_PCM) {
 				floatint = true;
-				break;
-			case WAVE_FORMAT_IEEE_FLOAT:
-				samplingrate = w64fmt.wf.nSamplesPerSec;
-				bitdepth = w64fmt.wBitsPerSample;
-				chnum = w64fmt.wf.nChannels;
-				nBlockAlign = w64fmt.wf.nBlockAlign;
+			}
+			if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
 				floatint = false;
-				break;
-			case WAVE_FORMAT_EXTENSIBLE:
-				llOff = sizeof(w64fmt) * -1;
-//				fileObj.Seek(llOff, CFile::current);
-				_fseeki64(wavread, llOff, SEEK_CUR);
-//				fileObj.Read(&stWaveFormatExt, sizeof(stWaveFormatExt));
-				fread(&stWaveFormatExt, sizeof(stWaveFormatExt), 1, wavread);
-				SubFormatGUID = (GUID)stWaveFormatExt.SubFormat;
-				if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_PCM){
-					floatint = true;
-				}
-				if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
-				floatint = false;
-				}
-				samplingrate = stWaveFormatExt.Format.nSamplesPerSec;
-				bitdepth = stWaveFormatExt.Samples.wValidBitsPerSample;
-				chnum = stWaveFormatExt.Format.nChannels;
-				nBlockAlign = stWaveFormatExt.Format.nBlockAlign;
-				break;
-			default:
-				TRACE("fmt Chunk FormatTag is Unknown:0x%04X", w64fmt.wf.wFormatTag);
-				break;
+			}
+			samplingrate = stWaveFormatExt.Format.nSamplesPerSec;
+			bitdepth = stWaveFormatExt.Samples.wValidBitsPerSample;
+			chnum = stWaveFormatExt.Format.nChannels;
+			nBlockAlign = stWaveFormatExt.Format.nBlockAlign;
+			break;
+		default:
+			TRACE("fmt Chunk FormatTag is Unknown:0x%04X", w64fmt.wf.wFormatTag);
+			break;
 		}
+
 		int i;
 
 		memset(&stData, NULL, sizeof(stData));
 		do{
-//			fileObj.Read(&stW64Chunk, sizeof(stW64Chunk));
+//				fileObj.Read(&stW64Chunk, sizeof(stW64Chunk));
 			fread(&stW64Chunk, sizeof(stW64Chunk), 1, wavread);
 			for(i = 0;i < W64_GUID_MAX;i ++){
 				if (stW64Chunk.Guid == s_GUID[i]) {
@@ -4222,7 +4337,7 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 							break;
 						default:
 							llOff = stW64Chunk.ullSize - sizeof(stW64Chunk);
-//							fileObj.Seek(stW64Chunk.ullSize, CFile::current);
+//								fileObj.Seek(stW64Chunk.ullSize, CFile::current);
 							_fseeki64(wavread, llOff, SEEK_CUR);
 							break;
 					}
@@ -4231,9 +4346,63 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			}
 		} while (stW64Chunk.Guid != s_GUID[W64_DATA]);
 		samplesize = stData.ullSampleLength - sizeof(stW64Chunk);
+	} else if (etExtType == EXT_TYPE_RF64) {
+		// RF64
+		try {
+			// 各チャンク情報はlibbw64ライブラリで取得するがdataチャンク読み出しは_tfopen_sで行うので自前でシーク
+			// _tfopen_sでOpen状態でlibbw64でも2重で開くことになるのでメタデータ読み出したらlibbw64は即座に開放する。
+			//  reader.reset()で開放しても良いがbw64::Bw64ReaderはC++ RAII原則沿っているとの事なので{～bw64::Bw64Reader～}にすることで抜けた瞬間に解放される。
+			// 正直2重で開くのは作りが悪い・・・作り直したいがゆとりがないorz
+			{
+				std::shared_ptr<bw64::Bw64Reader> reader = bw64::readFile(std::filesystem::path(filepath).string());
+
+				samplingrate = reader->sampleRate();
+				bitdepth	 = reader->bitDepth();
+				chnum		 = reader->channels();
+				nBlockAlign  = reader->blockAlignment();
+				samplesize	 = reader->dataChunk()->size();
+
+				const uint16_t fmtTag = reader->formatTag();
+				floatint = (fmtTag != WAVE_FORMAT_IEEE_FLOAT);
+
+				// const uint64_t totalFrames = reader->numberOfFrames();
+			}
+
+			// dataチャンクまでシーク
+			// ※本当はlibbw64でデータチャンク(データサンプル)を読み出す方が安全なんだけど、
+			//   下のリード→64bit変換処理を共通にしたいので強引にWAVと同じ処理にする。
+			//   各チャンクを考慮してデータチャンクまでシークするようにするのが正しい処理。
+			flag = true;
+			while (flag) {
+				if (feof(wavread)) {
+					fclose(wavread);
+					return false;
+				}
+				fread(tmp4, 1, 1, wavread);
+				tmp4[1] = '\0';
+				wav = tmp4;
+				if (wav == "d") {
+					fread(tmp4, 1, 3, wavread);
+					tmp4[3] = '\0';
+					wav = tmp4;
+					if (wav == "ata") {
+						flag = false;
+					}
+				}
+			}
+			int datachunksize;
+			fread(&datachunksize, 4, 1, wavread);
+		}
+		catch (const std::exception& e) {
+			TRACE(_T("RF64処理例外: %S\n"), e.what());
+			return false;
+		}
+	} else {
+		TRACE(_T("etExtType Err.: %d\n"), etExtType);
+		return false;
 	}
 #if 1
-	// ダウンサンプリングレート取得 ※1番近い周波数にアップサンプリングする周波数を検索
+	// リサンプリングレート取得 ※1番近い周波数にアップサンプリングする周波数を検索
 	GetTargetSample(&nDstSamplePerSec, &nDstBaseSamplePerSec, samplingrate, m_Pcm48KHzEnableDsd3MHzEnable);
 	Times = DSD_Times / (nDstSamplePerSec / nDstBaseSamplePerSec);
 	*pTimes = Times;
@@ -5656,6 +5825,12 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				pDlg->m_nTagMode = pDlg->SetTagdataForWav(chkfile_tmp, nConvertCount + 1, row_now, &pDlg->m_stID3tag);
 				bFlacDecodeRet = true;
 				bDelFile = false;
+			} else if (etExtType == EXT_TYPE_RF64) {
+				// RF64はWAVと同等TAGなのだが、面倒なので未対応で実装。取り合えずファイル名フォルダ名をTAGにする
+				_tcscpy_s(runfile_tmp, pDlg->m_lFileList.GetItemText(n, EN_LIST_COLUMN_PATH));
+				pDlg->m_nTagMode = pDlg->SetTagdataForWav(chkfile_tmp, nConvertCount + 1, row_now, &pDlg->m_stID3tag);
+				bFlacDecodeRet = true;
+				bDelFile = false;
 			} else {
 				// DFFならそのまま処理を開始
 				_tcscpy_s(runfile_tmp, pDlg->m_lFileList.GetItemText(n, EN_LIST_COLUMN_PATH));
@@ -5820,6 +5995,12 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				bDelFile = false;
 			} else if (etExtType == EXT_TYPE_WAVE64) {
 				// SONY WAVE64はTAG未対応なのでファイル名フォルダ名をTAGにする ※いつか対応させたいと思う・・・需要無さそうだけど(笑)
+				_tcscpy_s(runfile_tmp, pDlg->m_lFileList.GetItemText(nConvertCount, EN_LIST_COLUMN_PATH));
+				pDlg->m_nTagMode = pDlg->SetTagdataForWav(chkfile_tmp, nConvertCount + 1, row_now, &pDlg->m_stID3tag);
+				bFlacDecodeRet = true;
+				bDelFile = false;
+			} else if (etExtType == EXT_TYPE_RF64) {
+				// RF64はWAVと同等TAGなのだが、面倒なので未対応で実装。取り合えずファイル名フォルダ名をTAGにする
 				_tcscpy_s(runfile_tmp, pDlg->m_lFileList.GetItemText(nConvertCount, EN_LIST_COLUMN_PATH));
 				pDlg->m_nTagMode = pDlg->SetTagdataForWav(chkfile_tmp, nConvertCount + 1, row_now, &pDlg->m_stID3tag);
 				bFlacDecodeRet = true;
@@ -6004,6 +6185,12 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 				pDlg->m_nTagMode = pDlg->SetTagdataForWav(chkfile_tmp, 1, 1, &pDlg->m_stID3tag);
 				bFlacDecodeRet = true;
 				bDelFile = false;
+			} else if (etExtType == EXT_TYPE_RF64) {
+				// RF64はWAVと同等TAGなのだが、面倒なので未対応で実装。取り合えずファイル名フォルダ名をTAGにする
+				_tcscpy_s(runfile_tmp, pDlg->m_lFileList.GetItemText(iRow - i, EN_LIST_COLUMN_PATH));
+				pDlg->m_nTagMode = pDlg->SetTagdataForWav(chkfile_tmp, 1, 1, &pDlg->m_stID3tag);
+				bFlacDecodeRet = true;
+				bDelFile = false;
 			} else {
 				// DFFならそのまま処理を開始
 				_tcscpy_s(runfile_tmp, pDlg->m_lFileList.GetItemText(iRow - i, EN_LIST_COLUMN_PATH));
@@ -6110,6 +6297,9 @@ EXT_TYPE CPCMDSD_ConverterDlg::GetExtType(CString strExt)
 	}
 	if (strExt == _T("W64")) {
 		etRet = EXT_TYPE_WAVE64;
+	}
+	if (strExt == _T("RF64")) {
+		etRet = EXT_TYPE_RF64;
 	}
 	if (strExt == _T("FLAC")) {
 		etRet = EXT_TYPE_FLAC;
@@ -6381,7 +6571,7 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertProc(EXT_TYPE etExtType, TCHAR *orgfilepat
 	TCHAR drive[_MAX_DRIVE];
 	TCHAR dir[_MAX_DIR];
 
-	// 本当はWAV_ConvertProcの呼び出し元でEXT_TYPE_WAV、EXT_TYPE_WAVE64、EXT_TYPE_DFFで呼び出すべきだけど面倒なのでここでマスクする
+	// 本当はWAV_ConvertProcの呼び出し元でEXT_TYPE_WAV、EXT_TYPE_WAVE64、EXT_TYPE_RF64、EXT_TYPE_DFFで呼び出すべきだけど面倒なのでここでマスクする
 	switch(etExtType){
 		case EXT_TYPE_FLAC:
 		case EXT_TYPE_ALAC:
@@ -6461,9 +6651,12 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(EXT_TYPE etExtType, TCHAR *orgfilepath, T
 //	CString *metadata = new CString[EN_LIST_COLUMN_MAX];
 //	WAV_Metadata(filepath, metadata, &nSamplePerSec);
 //	delete[] metadata;
-	if(etExtType == EXT_TYPE_WAVE64){
+	if (etExtType == EXT_TYPE_WAVE64) {
 		// SONY WAVE64
 		GeyWave64SamplePerSec(filepath, &nSamplePerSec);
+	} else if (etExtType == EXT_TYPE_RF64) {
+		// RF64
+		GeyRf64SamplePerSec(filepath, &nSamplePerSec);
 	} else {
 		// WAV
 		GeyWavSamplePerSec(filepath, &nSamplePerSec);
@@ -7313,55 +7506,59 @@ void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName, BOOL bErrMsgEnable)
 {
 	CString *metadata = new CString[EN_LIST_COLUMN_MAX];
 	bool flag = true;
-	bool metaWav = false;
-	bool metaWave64 = false;
-	bool metaFlac = false;
-	bool metaAlac = false;
-	bool metaDff = false;
+	bool metaSuccess = false;
 
 	// WAVファイル解析
-	metaWav = WAV_Metadata(FileName, metadata);
-	if(metaWav == false){
-		//Sony Wave64(W64)ファイル解析
-		metaWave64 = Wave64_Metadata(FileName, metadata);
-		if(metaWave64 == false){
-			// FLACファイル解析
-			metaFlac = FLAC_Metadata(FileName, metadata);
-			if(metaFlac == false){
-				// ALACファイル解析
-				metaAlac = ALAC_Metadata(FileName, metadata);
-				if(metaAlac == false){
-					// DFFファイル解析
-					metaDff = DFF_Metadata(FileName, metadata);
-				}
-			}
-		}
+	if (WAV_Metadata(FileName, metadata)) {
+		metaSuccess = true;
+		TRACE(_T("WAV_FileRead() 成功: WAV %s\n"), FileName);
+	}
+	// Sony Wave64(W64)ファイル解析
+	else if (Wave64_Metadata(FileName, metadata)) {
+		metaSuccess = true;
+		TRACE(_T("WAV_FileRead() 成功: Wave64 %s\n"), FileName);
+	}
+	// RF64ファイル解析
+	else if (Rf64_Metadata(FileName, metadata)) {
+		metaSuccess = true;
+		TRACE(_T("WAV_FileRead() 成功: Wave64 %s\n"), FileName);
+	}
+	// FLACファイル解析
+	else if (FLAC_Metadata(FileName, metadata)) {
+		metaSuccess = true;
+		TRACE(_T("WAV_FileRead() 成功: FLAC %s\n"), FileName);
+	}
+	// ALACファイル解析
+	else if (ALAC_Metadata(FileName, metadata)) {
+		metaSuccess = true;
+		TRACE(_T("WAV_FileRead() 成功: ALAC %s\n"), FileName);
+	}
+	// DFFファイル解析
+	else if (DFF_Metadata(FileName, metadata)) {
+		metaSuccess = true;
+		TRACE(_T("WAV_FileRead() 成功: DFF %s\n"), FileName);
 	}
 
-	if (metaWav == true || metaWave64 == true || metaFlac == true || metaAlac == true || metaDff == true) {
+	if (metaSuccess) {
 		int row_now = m_lFileList.GetItemCount();
-		for (int i = 0; i < row_now; i++){
+		for (int i = 0; i < row_now; i++) {
 			// 重複パスは登録しない
-			if (metadata[EN_LIST_COLUMN_PATH] == m_lFileList.GetItemText(i, EN_LIST_COLUMN_PATH)){
+			if (metadata[EN_LIST_COLUMN_PATH] == m_lFileList.GetItemText(i, EN_LIST_COLUMN_PATH)) {
 				flag = false;
+				break;
 			}
 		}
-		if (flag){
+		if (flag) {
 			m_lFileList.InsertItem(row_now, FileName);
-			for (int n = 0; n < EN_LIST_COLUMN_MAX; n++){
+			for (int n = 0; n < EN_LIST_COLUMN_MAX; n++) {
 				m_lFileList.SetItemText(row_now, n, metadata[n]);
 			}
 		}
 	}
 	else {
-		CString strErrFile;
-		CString strErrMsg;
-		strErrFile = FileName;
-		strErrMsg = "WAV_FileRead() 未対応ファイル:";
-		strErrMsg += strErrFile;
-		strErrMsg += "\n";
-		TRACE(strErrMsg);
+		TRACE(_T("WAV_FileRead() 未対応ファイル:%s\n"), FileName);
 	}
+
 	delete[] metadata;
 }
 

@@ -47,6 +47,7 @@ typedef enum
 	EXT_TYPE_UNKNOW = 0,	// 不明
 	EXT_TYPE_WAV,			// .wav
 	EXT_TYPE_WAVE64,		// .w64 ※SONY WAVE64
+	EXT_TYPE_RF64,			// .rf64 ※RF64(MBWF)
 	EXT_TYPE_FLAC,			// .flac
 	EXT_TYPE_ALAC,			// .m4a ※ALACのみ
 	EXT_TYPE_DFF,			// .dff ※DSDIFF
@@ -381,10 +382,15 @@ public:
 	afx_msg bool WAV_Metadata(TCHAR *filepath, CString *metadata);
 	afx_msg bool WAV_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
 	// SONY WAVE64サンプリングレート取得
-	bool CPCMDSD_ConverterDlg::GeyWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
+	bool GeyWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
 	//SONT WAVE64(W64)ファイルチェック及びメタデータ読み取り
 	afx_msg bool Wave64_Metadata(TCHAR *filepath, CString *metadata);
 	afx_msg bool Wave64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
+	// RF64サンプリングレート取得
+	bool GeyRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec);
+	// RF64ファイルチェック及びメタデータ取得
+	afx_msg bool Rf64_Metadata(TCHAR* filepath, CString* metadata);
+	afx_msg bool Rf64_Metadata(TCHAR* filepath, CString* metadata, int* pnSamplePerSec);
 	//Flacファイルチェック及びメタデータ読み取り
 	afx_msg bool FLAC_Metadata(TCHAR *filepath, CString *metadata);
 	// ALAC(.m4a)ファイルチェック及びメタデータ読み取り
