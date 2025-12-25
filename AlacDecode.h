@@ -54,7 +54,7 @@ typedef struct {
 	CString strCompilation;					// コンピレーションアルバムの有無
 	CString strTempo;						// テンポ
 	CString strCopyright;					// 著作権
-	STCOVERART stCover[ALAC_COVER_MAX];			// カバージャケット  0:FRONT COVER 1以降:OTHER
+	STCOVERART stCover[ALAC_COVER_MAX];		// カバージャケット  0:FRONT COVER 1以降:OTHER
 	DWORD nCoverCount;						// カバージャケット数 ※最大ALAC_COVER_MAXまで
 }STALACTAG, *PSTALACTAG;
 
