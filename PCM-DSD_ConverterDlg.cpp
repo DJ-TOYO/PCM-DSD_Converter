@@ -19,7 +19,8 @@
 #include <mmsystem.h>
 #include <filesystem>
 
-#include "bw64/bw64.hpp"	// libbw64 - ITU-R BS.2088 Library ※hppのみで動作可能なライブラリ
+// libbw64でRF64のfloatが未対応だったので自前で対応したので不要
+//#include "bw64/bw64.hpp"	// libbw64 - ITU-R BS.2088 Library ※hppのみで動作可能なライブラリ
 
 #pragma comment(lib, "version.lib")
 //#ifdef _DEBUG
@@ -338,7 +339,7 @@ BOOL CPCMDSD_ConverterDlg::OnInitDialog()
 
 			msg = _T("");
 			msg += _T("1.オーディオファイルを追加します。\n");
-			msg += _T("  WAV/FLAC/ALAC(.m4a)/SONY WAVE64(.w64)/DSDIFF(.dff)\n\n");
+			msg += _T("  WAV/RF64/SONY WAVE64(.w64)/FLAC/ALAC(.m4a)/DSDIFF(.dff)\n\n");
 			msg += _T("2.実行ボタンでDSD変換が開始されます。\n");
 			msg += _T("  [全て実行]    ：リストの曲を全て変換します。\n");
 			msg += _T("  [実行]          ：リストの選択した曲を変換します。\n");
@@ -844,18 +845,13 @@ BOOL CPCMDSD_ConverterDlg::IsBitDepth(DWORD dwBit)
 }
 
 // WAVサンプリングレート取得
-bool CPCMDSD_ConverterDlg::GeyWavSamplePerSec(TCHAR *filepath, int *pnSamplePerSec)
+bool CPCMDSD_ConverterDlg::GetWavSamplePerSec(TCHAR *filepath, int *pnSamplePerSec)
 {
-	bool bRet;
-
-	CString *metadata = new CString[EN_LIST_COLUMN_MAX];
-	bRet = WAV_Metadata(filepath, metadata, pnSamplePerSec);
-	delete[] metadata;
-
-	return bRet;
+	CString metadata[EN_LIST_COLUMN_MAX];
+	return WAV_Metadata(filepath, metadata, pnSamplePerSec);
 }
 
-//Wavファイルチェック及びメタデータ読み取り
+// WAVファイルチェック及びメタデータ読み取り
 bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata)
 {
 	return WAV_Metadata(filepath, metadata, NULL);
@@ -872,157 +868,84 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata, int 
 
 	metadata[EN_LIST_COLUMN_PATH] = filepath;
 	metadata[EN_LIST_COLUMN_FILE_NAME] = filename;
-	BOOL flag = true;
-//	string wav;
-	CString wav;
-	wav = fileext;
+
 	CString strExt(fileext);
-	strExt = strExt.MakeUpper();
-//	if (strExt != ".WAV") {
-	if (strExt != _T(".WAV")) {
-		return false;
-	}
-#if 0
-	if (wav != ".wav" && wav != ".WAV"){
-		return false;
-	}
-#endif
-
-	FILE *fprwav;
-	errno_t error;
-
-//	if ((error = fopen_s(&fprwav, filepath_tmp, "rb")) != 0) {
-//		return false;
-//	}
-	error = _tfopen_s(&fprwav, filepath, _T("rb"));
-	if(error != 0) {
+	strExt.MakeUpper();
+	if (strExt != _T(".WAV") && strExt != _T(".RF64")) {
 		return false;
 	}
 
-	unsigned __int32 samplingrate;
-	unsigned short fmtID;
-	unsigned short bitdepth;
-	char tmp4[6];
+	FILE* fp = nullptr;
+	errno_t err = _tfopen_s(&fp, filepath, _T("rb"));
+	if (err != 0 || fp == nullptr) {
+		return false;
+	}
+
+	// WAV/RF64 共通ヘッダ解析
+	ST_WAVE_HEADER_INFO info{};
+	bool ok = parse_wave_or_rf64_header(fp, info);
+	fclose(fp);
+
+	if (!ok) {
+		return false;
+	}
+
+	// サンプリングレート
+	if (pnSamplePerSec != NULL) {
+		*pnSamplePerSec = static_cast<int>(info.sampleRate);
+	}
+
+	CString strTmp;
+	strTmp.Format(_T("%d"), info.sampleRate);
+	metadata[EN_LIST_COLUMN_SAMPLING_RATE] = strTmp;
+
+	// BIT深度
 	CString strBit;
-
-	while (flag){
-		if (feof(fprwav)){
-			fclose(fprwav);
-			return false;
-		}
-		fread(tmp4, 1, 1, fprwav);
-		tmp4[1] = '\0';
-		wav = tmp4;
-		if (wav == "f"){
-			fread(tmp4, 1, 3, fprwav);
-			tmp4[3] = '\0';
-			wav = tmp4;
-			if (wav == "mt "){
-				flag = false;
-			}
-		}
-	}
-
-	//fmtIDでFloat/Int判別
-	_fseeki64(fprwav, 4, SEEK_CUR);
-	fread(&fmtID, 2, 1, fprwav);
-	if (fmtID == WAVE_FORMAT_IEEE_FLOAT){
+	if (info.formatTag == WAVE_FORMAT_IEEE_FLOAT) {
 		strBit = "bit Float";
 	}
-	else if (fmtID == WAVE_FORMAT_PCM){
+	else {
 		strBit = "bit Int";
 	}
-	else{
-		fclose(fprwav);
-		return false;
-	}
 
-	unsigned short chnum;
-	fread(&chnum, 2, 1, fprwav);
-	if (chnum != 2){
-		fclose(fprwav);
-		return false;
-	}
-
-	fread(&samplingrate, 4, 1, fprwav);
-	if (pnSamplePerSec != NULL){
-		*pnSamplePerSec = (int)samplingrate;
-	}
-//	metadata[EN_LIST_COLUMN_SAMPLING_RATE] = to_string(samplingrate);
-	CString strTmp;
-	strTmp.Format(_T("%d"), samplingrate);
-	metadata[EN_LIST_COLUMN_SAMPLING_RATE] = strTmp;
-	// 有効サンプリングレートチェック
-	if(IsSamplingRate(samplingrate) == TRUE){
-		flag = true;
-	} else {
-		fclose(fprwav);
-		return false;
-	}
-
-	_fseeki64(fprwav, 6, SEEK_CUR);
-	fread(&bitdepth, 2, 1, fprwav);
-//	metadata[EN_LIST_COLUMN_BIT] = to_string(bitdepth) + metadata[EN_LIST_COLUMN_BIT];
-	strTmp.Format(_T("%d"), bitdepth);
+	strTmp.Format(_T("%d"), info.bitDepth);
 	metadata[EN_LIST_COLUMN_BIT] = strTmp + strBit;
-	// 有効BIT深度チェック
-	if (IsBitDepth(bitdepth) == TRUE){
-		flag = true;
-	} else{
-		fclose(fprwav);
-		return false;
-	}
 
-	while (flag){
-		if (feof(fprwav)){
-			fclose(fprwav);
-			return false;
-		}
-		fread(tmp4, 1, 1, fprwav);
-		tmp4[1] = '\0';
-		wav = tmp4;
-		if (wav == "d"){
-			fread(tmp4, 1, 3, fprwav);
-			tmp4[3] = '\0';
-			wav = tmp4;
-			if (wav == "ata"){
-				flag = false;
-			}
-		}
-	}
-	long samplesize;
-	fread(&samplesize, 4, 1, fprwav);
+	// 再生時間
+	uint64_t bytesPerFrame = info.blockAlign;
+	uint64_t totalFrames = (bytesPerFrame != 0)
+		? info.dataSizeBytes / bytesPerFrame
+		: 0;
 
+	INT64 playSec = (info.sampleRate != 0)
+		? static_cast<INT64>(totalFrames / info.sampleRate)
+		: 0;
 
-	INT64 nPlayTimeSec;		// 再生時間(sec)
 	CString strPlayTime;
-
-	nPlayTimeSec = samplesize / ((bitdepth + (bitdepth % 8)) / 8) / chnum / samplingrate;
-	strPlayTime.Format(_T("%3I64d:%02I64d"), nPlayTimeSec / 60, nPlayTimeSec % 60);
+	strPlayTime.Format(_T("%3I64d:%02I64d"), playSec / 60, playSec % 60);
 	metadata[EN_LIST_COLUMN_LENGTH] = strPlayTime;
 
-//	metadata[EN_LIST_COLUMN_SAMPLING_COUNT] = to_string(samplesize);
-//	strTmp.Format(_T("%d"), samplesize);
-	strTmp.Format(_T("%d"), samplesize / ((bitdepth + (bitdepth % 8)) / 8) / chnum);
+	// サンプル数
+	strTmp.Format(_T("%I64u"), totalFrames);
 	metadata[EN_LIST_COLUMN_SAMPLING_COUNT] = strTmp;
 
-	metadata[EN_LIST_COLUMN_EXT] = _T("WAV");
+	// 拡張子表示（WAV / RF64）
+	metadata[EN_LIST_COLUMN_EXT] = info.isRf64 ? _T("RF64") : _T("WAV");
 
-	fclose(fprwav);
-
-	STFLAC_COMMENT stFlacComm;		// FLAC COMMENT
+	// FLAC COMMENT 読み取り
+	STFLAC_COMMENT stFlacComm;
 	BOOL bTagEnable = FALSE;
 
 	FlacCommentInit(&stFlacComm, 1);
 	WAV_Tagdata(filepath, &stFlacComm, &bTagEnable);
 
-	metadata[EN_LIST_COLUMN_TRACK_NO] = stFlacComm.strTracknumber;
-	metadata[EN_LIST_COLUMN_TITLE] = stFlacComm.strTitle;
-	metadata[EN_LIST_COLUMN_ARTIST] = stFlacComm.strArtist;
-	metadata[EN_LIST_COLUMN_ALBUM] = stFlacComm.strAlbum;
-	metadata[EN_LIST_COLUMN_DISC_NO] = stFlacComm.strDiscnumber;
-	metadata[EN_LIST_COLUMN_DISC_TOTAL] = stFlacComm.strDisctotal;
-	metadata[EN_LIST_COLUMN_ALBUM_ARTIST] = stFlacComm.strAlbumArtist;
+	metadata[EN_LIST_COLUMN_TRACK_NO]	   = stFlacComm.strTracknumber;
+	metadata[EN_LIST_COLUMN_TITLE]		   = stFlacComm.strTitle;
+	metadata[EN_LIST_COLUMN_ARTIST] 	   = stFlacComm.strArtist;
+	metadata[EN_LIST_COLUMN_ALBUM]		   = stFlacComm.strAlbum;
+	metadata[EN_LIST_COLUMN_DISC_NO]	   = stFlacComm.strDiscnumber;
+	metadata[EN_LIST_COLUMN_DISC_TOTAL]    = stFlacComm.strDisctotal;
+	metadata[EN_LIST_COLUMN_ALBUM_ARTIST]  = stFlacComm.strAlbumArtist;
 
 	FlacCommentInit(&stFlacComm, 0);
 
@@ -1030,7 +953,7 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata, int 
 }
 
 // SONY WAVE64サンプリングレート取得
-bool CPCMDSD_ConverterDlg::GeyWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec)
+bool CPCMDSD_ConverterDlg::GetWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec)
 {
 	bool bRet;
 
@@ -1218,115 +1141,21 @@ bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR *filepath, CString *metadata, i
 }
 
 // RF64サンプリングレート取得
-bool CPCMDSD_ConverterDlg::GeyRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec)
+bool CPCMDSD_ConverterDlg::GetRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec)
 {
-	bool bRet;
-
-	CString* metadata = new CString[EN_LIST_COLUMN_MAX];
-	bRet = Rf64_Metadata(filepath, metadata, pnSamplePerSec);
-	delete[] metadata;
-
-	return bRet;
+	CString metadata[EN_LIST_COLUMN_MAX];
+	return WAV_Metadata(filepath, metadata, pnSamplePerSec);
 }
 
+// RF64ファイルチェック及びメタデータ読み取り
 bool CPCMDSD_ConverterDlg::Rf64_Metadata(TCHAR* filepath, CString* metadata)
 {
-	int nSamplePerSec = 0;
-	bool bRet;
-
-	bRet = Rf64_Metadata(filepath, metadata, &nSamplePerSec);
-
-	return bRet;
+	return WAV_Metadata(filepath, metadata, NULL);
 }
 
 bool CPCMDSD_ConverterDlg::Rf64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec)
 {
-	// パス分解
-	TCHAR filename[_MAX_FNAME];
-	TCHAR fileext[_MAX_EXT];
-	TCHAR drive[_MAX_DRIVE];
-	TCHAR dir[_MAX_DIR];
-
-	_tsplitpath_s(filepath, drive, dir, filename, fileext);
-
-	metadata[EN_LIST_COLUMN_PATH] = filepath;
-	metadata[EN_LIST_COLUMN_FILE_NAME] = filename;
-
-	// 拡張子チェック
-	CString strExt(fileext);
-	strExt.MakeUpper();
-	if (strExt != _T(".RF64")) {
-		return false;
-	}
-
-	try {
-		// libbw64でファイルを開く
-		std::shared_ptr<bw64::Bw64Reader> reader  = bw64::readFile(std::filesystem::path(filepath).string());
-
-		unsigned int    samplingrate = reader->sampleRate();
-		unsigned short  bitdepth = reader->bitDepth();
-		unsigned short  chnum = reader->channels();
-		uint64_t        totalSamples = reader->numberOfFrames();
-		uint16_t        fmtTag = reader->formatTag();
-
-		if (pnSamplePerSec != nullptr) {
-			*pnSamplePerSec = (int)samplingrate;
-		}
-
-		// サンプリングレート
-		CString strTmp;
-		strTmp.Format(_T("%d"), samplingrate);
-		metadata[EN_LIST_COLUMN_SAMPLING_RATE] = strTmp;
-
-		// ビット深度
-		CString strBit;
-		if (fmtTag == WAVE_FORMAT_IEEE_FLOAT) {
-			strBit = _T("bit Float");
-		}
-		else if (fmtTag == WAVE_FORMAT_PCM) {
-			strBit = _T("bit Int");
-		}
-		else {
-			strBit = _T("Unknown format");
-		}
-		strTmp.Format(_T("%d"), bitdepth);
-		metadata[EN_LIST_COLUMN_BIT] = strTmp + strBit;
-
-		// 再生時間
-		INT64 nPlayTimeSec = totalSamples / samplingrate;
-		CString strPlayTime;
-		strPlayTime.Format(_T("%3I64d:%02I64d"), nPlayTimeSec / 60, nPlayTimeSec % 60);
-		metadata[EN_LIST_COLUMN_LENGTH] = strPlayTime;
-
-		// サンプル数
-		strTmp.Format(_T("%llu"), totalSamples / chnum);
-		metadata[EN_LIST_COLUMN_SAMPLING_COUNT] = strTmp;
-
-		// 拡張子
-		metadata[EN_LIST_COLUMN_EXT] = _T("RF64");
-
-		STFLAC_COMMENT stFlacComm;		// FLAC COMMENT
-		BOOL bTagEnable = FALSE;
-
-		FlacCommentInit(&stFlacComm, 1);
-		WAV_Tagdata(filepath, &stFlacComm, &bTagEnable);
-
-		metadata[EN_LIST_COLUMN_TRACK_NO] = stFlacComm.strTracknumber;
-		metadata[EN_LIST_COLUMN_TITLE] = stFlacComm.strTitle;
-		metadata[EN_LIST_COLUMN_ARTIST] = stFlacComm.strArtist;
-		metadata[EN_LIST_COLUMN_ALBUM] = stFlacComm.strAlbum;
-		metadata[EN_LIST_COLUMN_DISC_NO] = stFlacComm.strDiscnumber;
-		metadata[EN_LIST_COLUMN_DISC_TOTAL] = stFlacComm.strDisctotal;
-		metadata[EN_LIST_COLUMN_ALBUM_ARTIST] = stFlacComm.strAlbumArtist;
-
-		FlacCommentInit(&stFlacComm, 0);
-
-		return true;
-	}
-	catch (std::exception& e) {
-		TRACE(_T("Rf64_Metadata() 例外: %S\n"), e.what());
-		return false;
-	}
+	return WAV_Metadata(filepath, metadata, pnSamplePerSec);
 }
 
 //FLACファイルチェック及びメタデータ読み取り
@@ -4130,7 +3959,7 @@ bool CPCMDSD_ConverterDlg::RequireWriteData(TCHAR *filepath, CString flag, wchar
 	return true;
 }
 
-////Wavファイルを64bit Float(double)化し、LR分離して一時ファイルとして書き出し
+// Wavファイルを64bit Float(double)化し、LR分離して一時ファイルとして書き出し
 bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FILE *tmpl, FILE *tmpr, int DSD_Times, unsigned int *pTimes, int number)
 {
 	FILE *wavread;
@@ -4192,8 +4021,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	}
 	setvbuf(wavread, NULL, _IOFBF, 512 * 1024);
 
-	char tmp4[6];
-	short fmtID;
+//	char tmp4[6];
+//	short fmtID;
 
 	ST_W64_CHUNK stW64ChunkRiff;
 	ST_W64_CHUNK stW64Chunkfmt;
@@ -4206,60 +4035,40 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 
 	LONGLONG llOff;
 
-	if (etExtType == EXT_TYPE_WAV){
-		// WAV
-		while (flag){
-			if (feof(wavread)){
+	if (etExtType == EXT_TYPE_WAV || etExtType == EXT_TYPE_RF64) {
+		// WAV / RF64
+		try {
+			ST_WAVE_HEADER_INFO stHeadInfo{};
+
+			// ファイル先頭から解析
+			_fseeki64(wavread, 0, SEEK_SET);
+			if (!parse_wave_or_rf64_header(wavread, stHeadInfo)) {
 				fclose(wavread);
 				return false;
 			}
-			fread(tmp4, 1, 1, wavread);
-			tmp4[1] = '\0';
-			wav = tmp4;
-			if (wav == "f"){
-				fread(tmp4, 1, 3, wavread);
-				tmp4[3] = '\0';
-				wav = tmp4;
-				if (wav == "mt "){
-					flag = false;
-				}
-			}
-		}
-		//fmtIDでFloat/Int判別
-		_fseeki64(wavread, 4, SEEK_CUR);
-		fread(&fmtID, 2, 1, wavread);
-		if (fmtID == WAVE_FORMAT_IEEE_FLOAT){
-			floatint = false;
-		} else{
-			floatint = true;
-		}
 
-		fread(&chnum, 2, 1, wavread);
-		fread(&samplingrate, 4, 1, wavread);
-		_fseeki64(wavread, 4, SEEK_CUR);
-		fread(&nBlockAlign, 2, 1, wavread);
-//		_fseeki64(wavread, 12, SEEK_CUR);
-		fread(&bitdepth, 2, 1, wavread);
+			// 共通ヘッダ情報 → 既存変数へ流し込み
+			samplingrate = stHeadInfo.sampleRate;
+//			bitdepth	 = stHeadInfo.bitDepth;
+			bitdepth	 = stHeadInfo.containerBits;
+			chnum		 = stHeadInfo.channels;
+			nBlockAlign  = stHeadInfo.blockAlign;
+			samplesize	 = stHeadInfo.dataSizeBytes;
 
-		flag = true;
-		while (flag){
-			if (feof(wavread)){
+			// int / float 判定
+			floatint = (stHeadInfo.formatTag != WAVE_FORMAT_IEEE_FLOAT);
+
+			// data チャンク先頭へシーク
+			if (_fseeki64(wavread, static_cast<LONGLONG>(stHeadInfo.dataOffset), SEEK_SET) != 0) {
 				fclose(wavread);
 				return false;
 			}
-			fread(tmp4, 1, 1, wavread);
-			tmp4[1] = '\0';
-			wav = tmp4;
-			if (wav == "d"){
-				fread(tmp4, 1, 3, wavread);
-				tmp4[3] = '\0';
-				wav = tmp4;
-				if (wav == "ata"){
-					flag = false;
-				}
-			}
 		}
-		fread(&samplesize, 4, 1, wavread);
+		catch (const std::exception& e) {
+			TRACE(_T("WAV/RF64 ヘッダ解析例外: %S\n"), e.what());
+			fclose(wavread);
+			return false;
+		}
 	} else if (etExtType == EXT_TYPE_WAVE64) {
 		// SONY WAVE64
 		// RIFFチャンク
@@ -4346,57 +4155,6 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			}
 		} while (stW64Chunk.Guid != s_GUID[W64_DATA]);
 		samplesize = stData.ullSampleLength - sizeof(stW64Chunk);
-	} else if (etExtType == EXT_TYPE_RF64) {
-		// RF64
-		try {
-			// 各チャンク情報はlibbw64ライブラリで取得するがdataチャンク読み出しは_tfopen_sで行うので自前でシーク
-			// _tfopen_sでOpen状態でlibbw64でも2重で開くことになるのでメタデータ読み出したらlibbw64は即座に開放する。
-			//  reader.reset()で開放しても良いがbw64::Bw64ReaderはC++ RAII原則沿っているとの事なので{～bw64::Bw64Reader～}にすることで抜けた瞬間に解放される。
-			// 正直2重で開くのは作りが悪い・・・作り直したいがゆとりがないorz
-			{
-				std::shared_ptr<bw64::Bw64Reader> reader = bw64::readFile(std::filesystem::path(filepath).string());
-
-				samplingrate = reader->sampleRate();
-				bitdepth	 = reader->bitDepth();
-				chnum		 = reader->channels();
-				nBlockAlign  = reader->blockAlignment();
-				samplesize	 = reader->dataChunk()->size();
-
-				const uint16_t fmtTag = reader->formatTag();
-				floatint = (fmtTag != WAVE_FORMAT_IEEE_FLOAT);
-
-				// const uint64_t totalFrames = reader->numberOfFrames();
-			}
-
-			// dataチャンクまでシーク
-			// ※本当はlibbw64でデータチャンク(データサンプル)を読み出す方が安全なんだけど、
-			//   下のリード→64bit変換処理を共通にしたいので強引にWAVと同じ処理にする。
-			//   各チャンクを考慮してデータチャンクまでシークするようにするのが正しい処理。
-			flag = true;
-			while (flag) {
-				if (feof(wavread)) {
-					fclose(wavread);
-					return false;
-				}
-				fread(tmp4, 1, 1, wavread);
-				tmp4[1] = '\0';
-				wav = tmp4;
-				if (wav == "d") {
-					fread(tmp4, 1, 3, wavread);
-					tmp4[3] = '\0';
-					wav = tmp4;
-					if (wav == "ata") {
-						flag = false;
-					}
-				}
-			}
-			int datachunksize;
-			fread(&datachunksize, 4, 1, wavread);
-		}
-		catch (const std::exception& e) {
-			TRACE(_T("RF64処理例外: %S\n"), e.what());
-			return false;
-		}
 	} else {
 		TRACE(_T("etExtType Err.: %d\n"), etExtType);
 		return false;
@@ -4753,6 +4511,188 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	fclose(wavread);
 
 	return true;
+}
+
+// リトルエンディアン読み取り関数
+uint16_t CPCMDSD_ConverterDlg::read_le_u16(FILE* fp)
+{
+	uint8_t b[2];
+	if (fread(b, 1, 2, fp) != 2) throw std::runtime_error("read_le_u16 failed");
+	return static_cast<uint16_t>(b[0] | (b[1] << 8));
+}
+
+uint32_t CPCMDSD_ConverterDlg::read_le_u32(FILE* fp)
+{
+	uint8_t b[4];
+	if (fread(b, 1, 4, fp) != 4) throw std::runtime_error("read_le_u32 failed");
+	return static_cast<uint32_t>(b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24));
+}
+
+uint64_t CPCMDSD_ConverterDlg::read_le_u64(FILE* fp)
+{
+	uint8_t b[8];
+	if (fread(b, 1, 8, fp) != 8) throw std::runtime_error("read_le_u64 failed");
+	uint64_t v = 0;
+	for (int i = 7; i >= 0; --i) {
+		v = (v << 8) | b[i];
+	}
+	return v;
+}
+
+// RF64 / WAV 共通ヘッダパーサ
+bool CPCMDSD_ConverterDlg::parse_wave_or_rf64_header(FILE* fp, ST_WAVE_HEADER_INFO& info)
+{
+	// ---- RIFF / RF64 ヘッダ ----
+	uint32_t riffId   = read_le_u32(fp);
+	uint32_t riffSize = read_le_u32(fp);
+	uint32_t waveId   = read_le_u32(fp);
+
+	if (waveId != ('W' | ('A' << 8) | ('V' << 16) | ('E' << 24))) {
+		return false;
+	}
+
+	bool isRf64 = (riffId == ('R' | ('F' << 8) | ('6' << 16) | ('4' << 24)));
+	info.isRf64 = isRf64;
+
+	Ds64Info ds64{};
+	bool fmtFound  = false;
+	bool dataFound = false;
+
+	// チャンク解析
+	for (;;) {
+		uint32_t chunkId;
+		uint32_t chunkSize;
+
+		if (fread(&chunkId, 4, 1, fp) != 1) break;
+		if (fread(&chunkSize, 4, 1, fp) != 1) break;
+
+		switch (chunkId) {
+
+		// ds64 チャンク（RF64専用）
+		case ('d' | ('s' << 8) | ('6' << 16) | ('4' << 24)):  // "ds64"
+			parse_ds64(fp, chunkSize, ds64);
+			break;
+
+		// fmt チャンク
+		case ('f' | ('m' << 8) | ('t' << 16) | (' ' << 24)):  // "fmt "
+			parse_fmt(fp, chunkSize, info);
+			fmtFound = true;
+			break;
+
+		// data チャンク
+		case ('d' | ('a' << 8) | ('t' << 16) | ('a' << 24)):  // "data"
+		{
+			int64_t pos = _ftelli64(fp);
+			if (pos < 0) throw std::runtime_error("ftell data failed");
+
+			info.dataOffset = static_cast<uint64_t>(pos);
+
+			// RF64 の場合は ds64 の 64bit サイズを優先
+			if (isRf64 && chunkSize == 0xFFFFFFFF && ds64.dataSize64 != 0) {
+				info.dataSizeBytes = ds64.dataSize64;
+			}
+			else {
+				info.dataSizeBytes = chunkSize;
+			}
+
+			// 総フレーム数
+			if (ds64.sampleCount != 0) {
+				info.totalFrames = ds64.sampleCount;
+			}
+			else if (info.channels != 0 && info.bitDepth != 0) {
+				uint64_t bytesPerFrame =
+					static_cast<uint64_t>(info.channels) * (info.bitDepth / 8);
+				if (bytesPerFrame != 0) {
+					info.totalFrames = info.dataSizeBytes / bytesPerFrame;
+				}
+			}
+
+			dataFound = true;
+			return fmtFound && dataFound;
+		}
+
+		// その他のチャンク → スキップ
+		default:
+			if (_fseeki64(fp, chunkSize, SEEK_CUR) != 0) {
+				throw std::runtime_error("fseek chunk skip failed");
+			}
+			break;
+		}
+	}
+
+	return fmtFound && dataFound;
+}
+
+// ds64チャンクパーサ
+void CPCMDSD_ConverterDlg::parse_ds64(FILE* fp, uint32_t chunkSize, Ds64Info& ds64)
+{
+	ds64.riffSize64  = read_le_u64(fp);
+	ds64.dataSize64  = read_le_u64(fp);
+	ds64.sampleCount = read_le_u64(fp);
+
+	// 残りのエントリはスキップ
+	uint32_t remain = chunkSize - 24;
+	if (remain > 0) {
+		_fseeki64(fp, remain, SEEK_CUR);
+	}
+}
+
+// fmtチャンクパーサ
+void CPCMDSD_ConverterDlg::parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADER_INFO& info)
+{
+	uint16_t formatTag	   = read_le_u16(fp);
+	uint16_t channels	   = read_le_u16(fp);
+	uint32_t sampleRate    = read_le_u32(fp);
+	uint32_t byteRate	   = read_le_u32(fp);
+	uint16_t blockAlign    = read_le_u16(fp);
+	uint16_t bitsPerSample = read_le_u16(fp); // コンテナビット（16/24/32/64）
+
+	info.formatTag	   = formatTag;
+	info.channels	   = channels;
+	info.sampleRate    = sampleRate;
+	info.blockAlign    = blockAlign;
+
+	// WAVEFORMATEX の初期値
+	info.bitDepth	   = bitsPerSample;
+	info.containerBits = bitsPerSample;
+
+	// 拡張 fmt
+	if (chunkSize > 16) {
+		// 拡張サイズ取得
+		uint16_t cbSize = read_le_u16(fp);
+
+		if (formatTag == WAVE_FORMAT_EXTENSIBLE && cbSize >= 22) {
+			// WAVEFORMATEXTENSIBLE
+			uint16_t validBits	 = read_le_u16(fp);
+			uint32_t channelMask = read_le_u32(fp);
+
+			uint8_t guid[16];
+			fread(guid, 1, 16, fp);
+
+			// PCM / FLOAT の判定
+			if (memcmp(guid, &KSDATAFORMAT_SUBTYPE_PCM, 16) == 0) {
+				info.formatTag = WAVE_FORMAT_PCM;
+			}
+			else if (memcmp(guid, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, 16) == 0) {
+				info.formatTag = WAVE_FORMAT_IEEE_FLOAT;
+			}
+
+			info.bitDepth	   = validBits;
+			info.containerBits = bitsPerSample;
+		} else {
+			// WAVEFORMATEX拡張部分は読み飛ばし
+			// ※cbSizeで2BYTE読んでいるので18BYTE以上がスキップ
+			if (chunkSize > 18) {
+				_fseeki64(fp, chunkSize - 18, SEEK_CUR);
+			}
+		}
+	}
+
+	// 非公式 20bit WAVEFORMATEXの救済処理
+	if (formatTag == WAVE_FORMAT_PCM && bitsPerSample == 20) {
+		info.bitDepth      = 20;  // 有効ビット
+		info.containerBits = 24;  // 実際の格納ビット（3byte）
+	}
 }
 
 // 振幅を解析　戻り値：デシベル変換値 ※解析っていっても登録してるだけ
@@ -6295,11 +6235,11 @@ EXT_TYPE CPCMDSD_ConverterDlg::GetExtType(CString strExt)
 	if (strExt == _T("WAV")) {
 		etRet = EXT_TYPE_WAV;
 	}
-	if (strExt == _T("W64")) {
-		etRet = EXT_TYPE_WAVE64;
-	}
 	if (strExt == _T("RF64")) {
 		etRet = EXT_TYPE_RF64;
+	}
+	if (strExt == _T("W64")) {
+		etRet = EXT_TYPE_WAVE64;
 	}
 	if (strExt == _T("FLAC")) {
 		etRet = EXT_TYPE_FLAC;
@@ -6653,13 +6593,13 @@ bool CPCMDSD_ConverterDlg::WAV_Convert(EXT_TYPE etExtType, TCHAR *orgfilepath, T
 //	delete[] metadata;
 	if (etExtType == EXT_TYPE_WAVE64) {
 		// SONY WAVE64
-		GeyWave64SamplePerSec(filepath, &nSamplePerSec);
+		GetWave64SamplePerSec(filepath, &nSamplePerSec);
 	} else if (etExtType == EXT_TYPE_RF64) {
 		// RF64
-		GeyRf64SamplePerSec(filepath, &nSamplePerSec);
+		GetRf64SamplePerSec(filepath, &nSamplePerSec);
 	} else {
 		// WAV
-		GeyWavSamplePerSec(filepath, &nSamplePerSec);
+		GetWavSamplePerSec(filepath, &nSamplePerSec);
 	}
 
 	// DSDサンプリングレート選択から変換DSD取得
@@ -6901,12 +6841,15 @@ bool CPCMDSD_ConverterDlg::WAV_ConvertSequential(EXT_TYPE etExtType, TCHAR *orgf
 //		CString *metadata = new CString[EN_LIST_COLUMN_MAX];
 //		WAV_Metadata(filepath, metadata, &nSamplePerSec);
 //		delete[] metadata;
-		if(etExtType == EXT_TYPE_WAVE64){
+		if (etExtType == EXT_TYPE_WAVE64) {
 			// SONY WAVE64
-			GeyWave64SamplePerSec(filepath, &nSamplePerSec);
+			GetWave64SamplePerSec(filepath, &nSamplePerSec);
+		} else if (etExtType == EXT_TYPE_RF64) {
+			// RF64
+			GetRf64SamplePerSec(filepath, &nSamplePerSec);
 		} else {
 			// WAV
-			GeyWavSamplePerSec(filepath, &nSamplePerSec);
+			GetWavSamplePerSec(filepath, &nSamplePerSec);
 		}
 
 		// DSDサンプリングレート選択から変換DSD取得
@@ -7513,13 +7456,13 @@ void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName, BOOL bErrMsgEnable)
 		metaSuccess = true;
 		TRACE(_T("WAV_FileRead() 成功: WAV %s\n"), FileName);
 	}
-	// Sony Wave64(W64)ファイル解析
-	else if (Wave64_Metadata(FileName, metadata)) {
+	// RF64ファイル解析
+	else if (Rf64_Metadata(FileName, metadata)) {
 		metaSuccess = true;
 		TRACE(_T("WAV_FileRead() 成功: Wave64 %s\n"), FileName);
 	}
-	// RF64ファイル解析
-	else if (Rf64_Metadata(FileName, metadata)) {
+	// Sony Wave64(W64)ファイル解析
+	else if (Wave64_Metadata(FileName, metadata)) {
 		metaSuccess = true;
 		TRACE(_T("WAV_FileRead() 成功: Wave64 %s\n"), FileName);
 	}
@@ -7585,7 +7528,7 @@ void CPCMDSD_ConverterDlg::DirectoryFind(TCHAR *DirectoryPath){
 					_tsplitpath_s(Filepath, NULL, 0, NULL, 0, NULL, 0, fileext, sizeof(fileext) / sizeof(fileext[0]));
 					strExt = fileext;
 					strExt = strExt.MakeUpper();
-					if ((strExt == _T(".WAV")) || (strExt == _T(".W64")) || (strExt == _T(".FLAC")) || (strExt == _T(".M4A")) || (strExt == _T(".DFF"))) {
+					if ((strExt == _T(".WAV")) || (strExt == _T(".RF6")) || (strExt == _T(".W64")) || (strExt == _T(".FLAC")) || (strExt == _T(".M4A")) || (strExt == _T(".DFF"))) {
 						WAV_FileRead(FilePathTemp.GetBuffer());
 					}
 				}

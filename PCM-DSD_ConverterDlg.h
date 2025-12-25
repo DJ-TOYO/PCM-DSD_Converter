@@ -137,6 +137,29 @@ typedef struct {
 	STID3TAGINFO stID3tag;			// TAG
 }ST_64BIT_DATA_INDEX;
 
+// RF64 / WAV 共通ヘッダ情報構造体
+typedef struct {
+	uint32_t sampleRate;			// サンプリングレート
+	uint16_t bitDepth;				// ビット深度（有効ビット）
+	uint16_t channels;				// チャンネル数
+	uint16_t formatTag;				// PCM=1, FLOAT=3, EXTENSIBLE=0xFFFE
+	uint16_t blockAlign;			// ブロックサイズ（1フレームのバイト数）
+
+	uint64_t dataSizeBytes;			// data チャンクのバイト数（RF64 は 64bit）
+	uint64_t totalFrames;			// 総フレーム数（全チャンネル込み）
+	uint64_t dataOffset;			// ファイル先頭から data の先頭までのオフセット
+	uint16_t containerBits;			// 実際の格納ビット数（16/24/32/64）
+
+	bool isRf64; // RF64 かどうか
+}ST_WAVE_HEADER_INFO, *PST_WAVE_HEADER_INFO;
+
+// ds64 チャンク情報（RF64 専用）
+struct Ds64Info {
+	uint64_t riffSize64 	= 0;   // RF64 の RIFF サイズ（64bit）
+	uint64_t dataSize64 	= 0;   // data チャンクのサイズ（64bit）
+	uint64_t sampleCount	= 0;   // 総サンプル数（フレーム数）
+};
+
 // GUID
 typedef enum {
 	W64_RIFF = 0,		// "RIFF"
@@ -377,17 +400,17 @@ public:
 	// 有効BIT深度チェック
 	BOOL IsBitDepth(DWORD dwBit);
 	// WAVサンプリングレート取得
-	bool GeyWavSamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
+	bool GetWavSamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
 	//WAVファイルチェック及びメタデータ読み取り
 	afx_msg bool WAV_Metadata(TCHAR *filepath, CString *metadata);
 	afx_msg bool WAV_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
 	// SONY WAVE64サンプリングレート取得
-	bool GeyWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
+	bool GetWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
 	//SONT WAVE64(W64)ファイルチェック及びメタデータ読み取り
 	afx_msg bool Wave64_Metadata(TCHAR *filepath, CString *metadata);
 	afx_msg bool Wave64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
 	// RF64サンプリングレート取得
-	bool GeyRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec);
+	bool GetRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec);
 	// RF64ファイルチェック及びメタデータ取得
 	afx_msg bool Rf64_Metadata(TCHAR* filepath, CString* metadata);
 	afx_msg bool Rf64_Metadata(TCHAR* filepath, CString* metadata, int* pnSamplePerSec);
@@ -459,6 +482,16 @@ public:
 	//Wavファイルを64bit Float(double)化し、LR分離して一時ファイルとして書き出し
 //	afx_msg bool TmpWriteData(TCHAR *filepath, FILE *tmpl, FILE *tmpr, int Times);
 	afx_msg bool TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FILE *tmpl, FILE *tmpr, int DSD_Times, unsigned int *Times, int number);
+	// リトルエンディアン読み取り関数
+	static uint16_t read_le_u16(FILE* fp);
+	static uint32_t read_le_u32(FILE* fp);
+	static uint64_t read_le_u64(FILE* fp);
+	// RF64 / WAV 共通ヘッダパーサ
+	static bool parse_wave_or_rf64_header(FILE* fp, ST_WAVE_HEADER_INFO& info);
+	// ds64チャンクパーサ
+	static void parse_ds64(FILE* fp, uint32_t chunkSize, Ds64Info& ds64);
+	// fmtチャンクパーサ
+	static void parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADER_INFO& info);
 	// 振幅を解析　戻り値：デシベル変換値
 	void PcmAnalysis(double amp_value, int ch, int nPcmSamplingRate);
 	// 振幅ピーク値取得 ※左右Chの大きい方
