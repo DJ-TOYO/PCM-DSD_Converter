@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
-                             - PCM-DSD Converter 改 Ver1.13β1 -
+                             - PCM-DSD Converter 改 Ver1.13β2 -
 --------------------------------------------------------------------------------
-                                                              DJ TOYO 2025/4/9
+                                                              DJ TOYO 2025/12/25
 【はじめに】
 
 「PCM-DSD_Converter改」はserieril氏作DSD変換ソフト「PCM-DSD_Converter V1.0.0.11」をベースに
@@ -12,8 +12,8 @@
 
 
 主な変更内容について
-・WAVだけでなくFLAC/ALAC/SONY WAVE64に対応
-・ID3V2.3形式タグ出力に対応 ※SONY WAVE64(.W64)は未対応
+・WAVだけでなくFLAC/ALAC/SONY WAVE64/RF64に対応
+・ID3V2.3形式タグ出力に対応 ※SONY WAVE64(.W64)、RF64は未対応
 ・DSD出力フォーマットを.DFFから.DSFに変更、これによりID3V2タグの使用が可能
 ・オーディオ機器との再生互換性向上の為、48KHz系PCMをDSD2.8MHzの倍数に準拠したサンプリングレートで出力出来るようにした
 ・DSDサンプリングレート自動選択機能追加
@@ -38,6 +38,7 @@
 ■入力フォーマット
 ・ファイル
   WAVE(.wav)
+  RF64(.rf64)
   SONY WAVE64(.w64)
   FLAC(.flac)
   ALAC(.m4A)
@@ -46,9 +47,11 @@
   44.1/48/88.2/96/176.4/192/352.8/384/705.6/768KHz
   ※DSDIFFは制限がありません。
 ・ビットレート
-  WAV        :16/20/24/32/64Bit Integer
+  WAV        :16/20/24/32Bit Integer
               32/64Bit Float
-  SONY WAVE64:16/20/24/32/64Bit Integer
+  RF64       :16/20/24/32Bit Integer
+              32/64Bit Float
+  SONY WAVE64:16/20/24/32Bit Integer
               32/64Bit Float
   FLAC       :16/24/32Bit Integer
   ALAC       :16/20/24/32Bit Integer
@@ -59,7 +62,7 @@
   WAV(RIFF)
   FLAC
   ALAC ※カバー画像は、JPEG/PNGのみサポート
-  ※SONY WAVE64ファイルはタグ未対応
+  ※RF64/SONY WAVE64ファイルはタグ未対応
 
 ■出力DSDフォーマット
 ・ファイル
@@ -229,7 +232,7 @@
   タグのないWAV、及びW64、DFFファイルは、フォルダ名をアルバム、ファイル名をタイトル、変換順をトラックNoとして独自に設定されます。
   [実行]、[全て実行]は常にトラックNo1となります。
   ALACのカバー画像は1枚目がFRONT画像、2枚目以降が全てOTHER画像のようでしたので、2枚目まで引き継ぎます。
-  ※SONY WAVE64(.W64)ファイルのタグは未対応です。タグのないWAVファイルと同等のタグが生成されます。
+  ※RF64/SONY WAVE64(.W64)ファイルのタグは未対応です。タグのないWAVファイルと同等のタグが生成されます。
 
 ・アルバムタグサフィックス
   アルバムタグがある場合に、ここに入力した文字がアルバムタグの後尾に追加されます。
@@ -670,6 +673,11 @@ https://visualstudio.microsoft.com/ja/downloads/#other-ja-family
 
 
 【履歴】
+  Ver1.13β2 2025/12/25
+  ・RF64(.rf64)ファイルに対応
+  ・FLAC Ver1.5.0に差し替え
+  ・WAVの互換性向上
+
   Ver1.12	2023/7/25
   ・FLAC Ver1.4.3に差し替え
 
