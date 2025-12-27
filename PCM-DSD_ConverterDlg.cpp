@@ -4049,8 +4049,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 
 			// 共通ヘッダ情報 → 既存変数へ流し込み
 			samplingrate = stHeadInfo.sampleRate;
-//			bitdepth	 = stHeadInfo.bitDepth;
-			bitdepth	 = stHeadInfo.containerBits;
+			bitdepth	 = stHeadInfo.bitDepth;
+//			bitdepth	 = stHeadInfo.containerBits;
 			chnum		 = stHeadInfo.channels;
 			nBlockAlign  = stHeadInfo.blockAlign;
 			samplesize	 = stHeadInfo.dataSizeBytes;
@@ -4654,7 +4654,7 @@ void CPCMDSD_ConverterDlg::parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADE
 
 	// WAVEFORMATEX の初期値
 	info.bitDepth	   = bitsPerSample;
-	info.containerBits = bitsPerSample;
+//	info.containerBits = bitsPerSample;
 
 	// 拡張 fmt
 	if (chunkSize > 16) {
@@ -4678,7 +4678,7 @@ void CPCMDSD_ConverterDlg::parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADE
 			}
 
 			info.bitDepth	   = validBits;
-			info.containerBits = bitsPerSample;
+//			info.containerBits = bitsPerSample;
 		} else {
 			// WAVEFORMATEX拡張部分は読み飛ばし
 			// ※cbSizeで2BYTE読んでいるので18BYTE以上がスキップ
@@ -4689,10 +4689,10 @@ void CPCMDSD_ConverterDlg::parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADE
 	}
 
 	// 非公式 20bit WAVEFORMATEXの救済処理
-	if (formatTag == WAVE_FORMAT_PCM && bitsPerSample == 20) {
-		info.bitDepth      = 20;  // 有効ビット
-		info.containerBits = 24;  // 実際の格納ビット（3byte）
-	}
+//	if (formatTag == WAVE_FORMAT_PCM && bitsPerSample == 20) {
+//		info.bitDepth      = 20;  // 有効ビット
+//		info.containerBits = 24;  // 実際の格納ビット（3byte）
+//	}
 }
 
 // 振幅を解析　戻り値：デシベル変換値 ※解析っていっても登録してるだけ

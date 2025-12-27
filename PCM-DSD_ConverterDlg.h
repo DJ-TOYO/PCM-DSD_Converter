@@ -148,8 +148,9 @@ typedef struct {
 	uint64_t dataSizeBytes;			// data チャンクのバイト数（RF64 は 64bit）
 	uint64_t totalFrames;			// 総フレーム数（全チャンネル込み）
 	uint64_t dataOffset;			// ファイル先頭から data の先頭までのオフセット
-	uint16_t containerBits;			// 実際の格納ビット数（16/24/32/64）
-
+//	uint16_t containerBits;			// 実際の格納ビット数（16/24/32/64）※20bit→24bit
+									// 既存ロジックでもbitDepthが20bitの場合、24bitで動作するようしてあるので
+									// bitDepthと分けて管理する場合、該当処理をあちこち直さないと駄目なので分けるのやめる。
 	bool isRf64; // RF64 かどうか
 }ST_WAVE_HEADER_INFO, *PST_WAVE_HEADER_INFO;
 
