@@ -43,7 +43,7 @@ using namespace std;
 #define AMP_LIMIT_MAX	1.0						// -1.0～1.0
 //#define AMP_LIMIT_MAX	(1.0 - DBL_EPSILON)		// -(1.0 - DBL_EPSILON) ～ (1.0 - DBL_EPSILON)
 
-GUID s_GUID[W64_GUID_MAX] = {
+GUID s_W64_GUID[W64_GUID_MAX] = {
 	{0x66666972,0x912E,0x11CF,0xA5,0xD6,0x28,0xDB,0x04,0xC1,0x00,0x00},		// W64_RIFF       :"RIFF"      { 66666972-912E-11CF-A5D6-28DB04C10000 }
 	{0x7473696C,0x912F,0x11CF,0xA5,0xD6,0x28,0xDB,0x04,0xC1,0x00,0x00},		// W64_LIST       :"LIST"      { 7473696C-912F-11CF-A5D6-28DB04C10000 }
 	{0x65766177,0xACF3,0x11D3,0x8C,0xD1,0x00,0xC0,0x4F,0x8E,0xDB,0x8A},		// W64_WAVE       :"WAVE"      { 65766177-ACF3-11D3-8CD1-00C04F8EDB8A }
@@ -972,170 +972,74 @@ bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR *filepath, CString *metadata)
 	return Wave64_Metadata(filepath, metadata, &nSamplePerSec);
 }
 
-bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec)
+bool CPCMDSD_ConverterDlg::Wave64_Metadata(TCHAR* filepath, CString* metadata, int* pnSamplePerSec)
 {
-	TCHAR filename[_MAX_FNAME];
-	TCHAR fileext[_MAX_EXT];
-	TCHAR drive[_MAX_DRIVE];
-	TCHAR dir[_MAX_DIR];
-
-	_tsplitpath_s(filepath, drive, dir, filename, fileext);
-
-	metadata[EN_LIST_COLUMN_PATH] = filepath;
-	metadata[EN_LIST_COLUMN_FILE_NAME] = filename;
-	CString wav;
-	wav = fileext;
-	CString strExt(fileext);
-	strExt = strExt.MakeUpper();
-	if (strExt != _T(".W64")) {
+	FILE* fp = nullptr;
+	errno_t err = _tfopen_s(&fp, filepath, _T("rb"));
+	if (err != 0 || fp == nullptr) {
 		return false;
 	}
 
-	CFile fileObj;
-	CFileException exp;
-	BOOL bRet;
-
-	ST_W64_CHUNK stW64ChunkRiff;
-	ST_W64_CHUNK stW64Chunkfmt;
-	ST_W64_CHUNK stW64Chunk;
-	ST_W64_FACT stFact;
-	ST_W64_DATA stData;
-	GUID guidWave;
-	PCMWAVEFORMAT w64fmt;
-
-	DWORD samplingrate = 0;
-	WORD bitdepth = 0;
-	CString strTmp;
-	CString strBit;
-
-	bRet = fileObj.Open(filepath, CFile::modeRead | CFile::typeBinary, &exp);
-	if (bRet == FALSE) {
+	ST_WAVE_HEADER_INFO info{};
+	if (!parse_wave64_header(fp, info)) {
+		fclose(fp);
 		return false;
 	}
+	fclose(fp);
 
-	// RIFFチャンク
-	fileObj.Read(&stW64ChunkRiff, sizeof(stW64ChunkRiff));
-	if (stW64ChunkRiff.Guid != s_GUID[W64_RIFF]) {
-		fileObj.Close();
-		return false;
-	}
-
-	// WAVEチャンク
-	fileObj.Read(&guidWave, sizeof(guidWave));
-	if (guidWave != s_GUID[W64_WAVE]) {
-		fileObj.Close();
-		return false;
-	}
-
-	// fmtチャンク
-	fileObj.Read(&stW64Chunkfmt, sizeof(stW64Chunkfmt));
-	if (stW64Chunkfmt.Guid != s_GUID[W64_FMT]) {
-		fileObj.Close();
-		return false;
-	}
-	fileObj.Read(&w64fmt, sizeof(w64fmt));
-
-	WAVEFORMATEXTENSIBLE stWaveFormatExt;
-	GUID SubFormatGUID;
-
-	LONGLONG llOff;
-	unsigned short chnum = 0;
-
-	switch(w64fmt.wf.wFormatTag){
-		case WAVE_FORMAT_PCM:
-			samplingrate = w64fmt.wf.nSamplesPerSec;
-			bitdepth = w64fmt.wBitsPerSample;
-			chnum = w64fmt.wf.nChannels;
-			strBit = "bit Int";
-			break;
-		case WAVE_FORMAT_IEEE_FLOAT:
-			samplingrate = w64fmt.wf.nSamplesPerSec;
-			bitdepth = w64fmt.wBitsPerSample;
-			chnum = w64fmt.wf.nChannels;
-			strBit = "bit Float";
-			break;
-		case WAVE_FORMAT_EXTENSIBLE:
-			llOff = sizeof(w64fmt) * -1;
-			fileObj.Seek(llOff, CFile::current);
-			fileObj.Read(&stWaveFormatExt, sizeof(stWaveFormatExt));
-			
-			SubFormatGUID = (GUID)stWaveFormatExt.SubFormat;
-			if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_PCM){
-				strBit = "bit Int";
-			}
-			if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
-				strBit = "bit Float";
-			}
-			samplingrate = stWaveFormatExt.Format.nSamplesPerSec;
-			bitdepth = stWaveFormatExt.Samples.wValidBitsPerSample;
-			chnum = stWaveFormatExt.Format.nChannels;
-			break;
-		default:
-			TRACE("fmt Chunk FormatTag is Unknown:0x%04X", w64fmt.wf.wFormatTag);
-			break;
-	}
-
-	if (pnSamplePerSec != NULL){
-		*pnSamplePerSec = (int)samplingrate;
-	}
-
-	strTmp.Format(_T("%d"), samplingrate);
-	metadata[EN_LIST_COLUMN_SAMPLING_RATE] = strTmp;
-	strTmp.Format(_T("%d"), bitdepth);
-	metadata[EN_LIST_COLUMN_BIT] = strTmp + strBit;
-
-	int i;
-	stData.ullSampleLength = 0;
-	do{
-		fileObj.Read(&stW64Chunk, sizeof(stW64Chunk));
-		for(i = 0;i < W64_GUID_MAX;i ++){
-			if (stW64Chunk.Guid == s_GUID[i]) {
-				switch(i){
-					case W64_FACT:
-						fileObj.Read(&stFact, sizeof(stFact));
-						break;
-					case W64_DATA:
-						stData.ullSampleLength = stW64Chunk.ullSize;
-						break;
-					default:
-						fileObj.Seek(stW64Chunk.ullSize, CFile::current);
-						break;
-				}
-				break;
-			}
-		}
-	} while (stW64Chunk.Guid != s_GUID[W64_DATA]);
-
-	fileObj.Close();
-
-	if (chnum != 2) {
-		fileObj.Close();
+	// チャンネル数チェック
+	if (info.channels != 2) {
 		return false;
 	}
 
 	// 有効サンプリングレートチェック
-	if(IsSamplingRate(samplingrate) == FALSE){
+	if (!IsSamplingRate(info.sampleRate)) {
 		return false;
 	}
 
 	// 有効BIT深度チェック
-	if (IsBitDepth(bitdepth) == FALSE){
+	if (!IsBitDepth(info.bitDepth)) {
 		return false;
 	}
 
-	UINT64 nPlayTimeSec;		// 再生時間(sec)
-	CString strPlayTime;
-	UINT64 samplesize;
-	samplesize = stData.ullSampleLength - sizeof(stW64Chunk);
+	// サンプルレート
+	if (pnSamplePerSec) {
+		*pnSamplePerSec = info.sampleRate;
+	}
 
-	nPlayTimeSec = samplesize / ((bitdepth + (bitdepth % 8)) / 8) / chnum / samplingrate;
-	strPlayTime.Format(_T("%3I64d:%02I64d"), nPlayTimeSec / 60, nPlayTimeSec % 60);
-	metadata[EN_LIST_COLUMN_LENGTH] = strPlayTime;
+	// パス
+	metadata[EN_LIST_COLUMN_PATH] = filepath;
 
-	strTmp.Format(_T("%lld"), samplesize / ((bitdepth + (bitdepth % 8)) / 8) / chnum);
-	metadata[EN_LIST_COLUMN_SAMPLING_COUNT] = strTmp;
+	// ファイル名
+	TCHAR filename[_MAX_FNAME];
+	TCHAR fileext[_MAX_EXT];
+	TCHAR drive[_MAX_DRIVE];
+	TCHAR dir[_MAX_DIR];
+	_tsplitpath_s(filepath, drive, dir, filename, fileext);
+	metadata[EN_LIST_COLUMN_FILE_NAME] = filename;
 
+	// サンプリングレート
+	metadata[EN_LIST_COLUMN_SAMPLING_RATE].Format(_T("%d"), info.sampleRate);
+
+	// BIT 表示（Int / Float 付ける）
+	CString strBitSuffix;
+	if (info.formatTag == WAVE_FORMAT_IEEE_FLOAT)
+		strBitSuffix = _T(" Float");
+	else
+		strBitSuffix = _T(" Int");
+
+	metadata[EN_LIST_COLUMN_BIT].Format(_T("%d%s"), info.bitDepth, strBitSuffix.GetString());
+
+	// 拡張子
 	metadata[EN_LIST_COLUMN_EXT] = _T("W64");
+
+	// 再生時間
+	UINT64 samples = info.totalFrames;
+	UINT64 sec = (info.sampleRate != 0) ? samples / info.sampleRate : 0;
+	metadata[EN_LIST_COLUMN_LENGTH].Format(_T("%3I64d:%02I64d"), sec / 60, sec % 60);
+
+	// サンプル数
+	metadata[EN_LIST_COLUMN_SAMPLING_COUNT].Format(_T("%lld"), samples);
 
 	return true;
 }
@@ -3967,13 +3871,14 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 
 	errno_t error;
 	bool flag = true;
-	bool floatint = true;		// 変数名が宜しくない。trueがWAVE_FORMAT_PCM(intデータ)、falseがWAVE_FORMAT_IEEE_FLOAT(FLOATデータ)。というかfmtIDをそのまま持てばよい
+//	bool floatint = true;		// 変数名が宜しくない。trueがWAVE_FORMAT_PCM(intデータ)、falseがWAVE_FORMAT_IEEE_FLOAT(FLOATデータ)。というかfmtIDをそのまま持てばよい
+	uint16_t formatTag;
 	double dbL = 0;
 	double dbR = 0;
 	double dbLR = 0;
 	double ddbPeak = 0;
 	double dDiffdB = 0;
-	CString wav;
+	CString wavfstAmp;
 
 	unsigned short chnum;
 	unsigned __int32 samplingrate;
@@ -4021,45 +3926,12 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	}
 	setvbuf(wavread, NULL, _IOFBF, 512 * 1024);
 
-//	char tmp4[6];
-//	short fmtID;
-
-	ST_W64_CHUNK stW64ChunkRiff;
-	ST_W64_CHUNK stW64Chunkfmt;
-	ST_W64_CHUNK stW64Chunk;
-	ST_W64_DATA stData;
-	GUID guidWave;
-	PCMWAVEFORMAT w64fmt;
-	WAVEFORMATEXTENSIBLE stWaveFormatExt;
-	GUID SubFormatGUID;
-
-	LONGLONG llOff;
-
+	ST_WAVE_HEADER_INFO stHeadInfo{};
 	if (etExtType == EXT_TYPE_WAV || etExtType == EXT_TYPE_RF64) {
-		// WAV / RF64
+		//*** WAV / RF64解析 ***
 		try {
-			ST_WAVE_HEADER_INFO stHeadInfo{};
-
-			// ファイル先頭から解析
-			_fseeki64(wavread, 0, SEEK_SET);
+			// RF64 / WAV ヘッダパーサ
 			if (!parse_wave_or_rf64_header(wavread, stHeadInfo)) {
-				fclose(wavread);
-				return false;
-			}
-
-			// 共通ヘッダ情報 → 既存変数へ流し込み
-			samplingrate = stHeadInfo.sampleRate;
-			bitdepth	 = stHeadInfo.bitDepth;
-//			bitdepth	 = stHeadInfo.containerBits;
-			chnum		 = stHeadInfo.channels;
-			nBlockAlign  = stHeadInfo.blockAlign;
-			samplesize	 = stHeadInfo.dataSizeBytes;
-
-			// int / float 判定
-			floatint = (stHeadInfo.formatTag != WAVE_FORMAT_IEEE_FLOAT);
-
-			// data チャンク先頭へシーク
-			if (_fseeki64(wavread, static_cast<LONGLONG>(stHeadInfo.dataOffset), SEEK_SET) != 0) {
 				fclose(wavread);
 				return false;
 			}
@@ -4070,95 +3942,43 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 			return false;
 		}
 	} else if (etExtType == EXT_TYPE_WAVE64) {
-		// SONY WAVE64
-		// RIFFチャンク
-		fread(&stW64ChunkRiff, sizeof(stW64ChunkRiff), 1, wavread);
-		//		fileObj.Read(&stW64ChunkRiff, sizeof(stW64ChunkRiff));
-		if (stW64ChunkRiff.Guid != s_GUID[W64_RIFF]) {
+		//*** SONY WAVE64(W64)解析 ***
+		try {
+			// SONY WAVE64ヘッダパーサ
+			if (!parse_wave64_header(wavread, stHeadInfo)) {
+				fclose(wavread);
+				return false;
+			}
+		}
+		catch (const std::exception& e) {
+			TRACE(_T("W64 ヘッダ解析例外: %S\n"), e.what());
+
+			fclose(wavread);
 			return false;
 		}
-
-		// WAVEチャンク
-		fread(&guidWave, sizeof(guidWave), 1, wavread);
-		//		fileObj.Read(&guidWave, sizeof(guidWave));
-		if (guidWave != s_GUID[W64_WAVE]) {
-			return false;
-		}
-
-		// fmtチャンク
-		fread(&stW64Chunkfmt, sizeof(stW64Chunkfmt), 1, wavread);
-		//		fileObj.Read(&stW64Chunkfmt, sizeof(stW64Chunkfmt));
-		if (stW64Chunkfmt.Guid != s_GUID[W64_FMT]) {
-			return false;
-		}
-		fread(&w64fmt, sizeof(w64fmt), 1, wavread);
-		//		fileObj.Read(&w64fmt, sizeof(w64fmt));
-
-		switch (w64fmt.wf.wFormatTag) {
-		case WAVE_FORMAT_PCM:
-			samplingrate = w64fmt.wf.nSamplesPerSec;
-			bitdepth = w64fmt.wBitsPerSample;
-			chnum = w64fmt.wf.nChannels;
-			nBlockAlign = w64fmt.wf.nBlockAlign;
-			floatint = true;
-			break;
-		case WAVE_FORMAT_IEEE_FLOAT:
-			samplingrate = w64fmt.wf.nSamplesPerSec;
-			bitdepth = w64fmt.wBitsPerSample;
-			chnum = w64fmt.wf.nChannels;
-			nBlockAlign = w64fmt.wf.nBlockAlign;
-			floatint = false;
-			break;
-		case WAVE_FORMAT_EXTENSIBLE:
-			llOff = sizeof(w64fmt) * -1;
-			//				fileObj.Seek(llOff, CFile::current);
-			_fseeki64(wavread, llOff, SEEK_CUR);
-			//				fileObj.Read(&stWaveFormatExt, sizeof(stWaveFormatExt));
-			fread(&stWaveFormatExt, sizeof(stWaveFormatExt), 1, wavread);
-			SubFormatGUID = (GUID)stWaveFormatExt.SubFormat;
-			if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_PCM) {
-				floatint = true;
-			}
-			if (SubFormatGUID == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
-				floatint = false;
-			}
-			samplingrate = stWaveFormatExt.Format.nSamplesPerSec;
-			bitdepth = stWaveFormatExt.Samples.wValidBitsPerSample;
-			chnum = stWaveFormatExt.Format.nChannels;
-			nBlockAlign = stWaveFormatExt.Format.nBlockAlign;
-			break;
-		default:
-			TRACE("fmt Chunk FormatTag is Unknown:0x%04X", w64fmt.wf.wFormatTag);
-			break;
-		}
-
-		int i;
-
-		memset(&stData, NULL, sizeof(stData));
-		do{
-//				fileObj.Read(&stW64Chunk, sizeof(stW64Chunk));
-			fread(&stW64Chunk, sizeof(stW64Chunk), 1, wavread);
-			for(i = 0;i < W64_GUID_MAX;i ++){
-				if (stW64Chunk.Guid == s_GUID[i]) {
-					switch(i){
-						case W64_DATA:
-							stData.ullSampleLength = stW64Chunk.ullSize;
-							break;
-						default:
-							llOff = stW64Chunk.ullSize - sizeof(stW64Chunk);
-//								fileObj.Seek(stW64Chunk.ullSize, CFile::current);
-							_fseeki64(wavread, llOff, SEEK_CUR);
-							break;
-					}
-					break;
-				}
-			}
-		} while (stW64Chunk.Guid != s_GUID[W64_DATA]);
-		samplesize = stData.ullSampleLength - sizeof(stW64Chunk);
 	} else {
 		TRACE(_T("etExtType Err.: %d\n"), etExtType);
 		return false;
 	}
+
+	// data チャンク先頭へシーク
+	if (_fseeki64(wavread, static_cast<LONGLONG>(stHeadInfo.dataOffset), SEEK_SET) != 0) {
+		fclose(wavread);
+		return false;
+	}
+
+	// 共通ヘッダ情報 → 既存変数へ流し込み
+	samplingrate = stHeadInfo.sampleRate;
+	bitdepth	 = stHeadInfo.bitDepth;
+//	bitdepth	 = stHeadInfo.containerBits;
+	chnum		 = stHeadInfo.channels;
+	nBlockAlign  = stHeadInfo.blockAlign;
+	samplesize	 = stHeadInfo.dataSizeBytes;
+	formatTag    = stHeadInfo.formatTag;
+
+	// int / float 判定
+//	floatint = (stHeadInfo.formatTag != WAVE_FORMAT_IEEE_FLOAT);
+
 #if 1
 	// リサンプリングレート取得 ※1番近い周波数にアップサンプリングする周波数を検索
 	GetTargetSample(&nDstSamplePerSec, &nDstBaseSamplePerSec, samplingrate, m_Pcm48KHzEnableDsd3MHzEnable);
@@ -4183,28 +4003,6 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	SetID3v2UserTagOriginalFormat(0, m_SrcFileName, samplingrate, bitdepth, &m_stID3tag);
 #endif
 
-#if 0
-	while (flag){
-		if (feof(wavread)){
-			fclose(wavread);
-			return false;
-		}
-		fread(tmp4, 1, 1, wavread);
-		tmp4[1] = '\0';
-		wav = tmp4;
-		if (wav == "d"){
-			fread(tmp4, 1, 3, wavread);
-			tmp4[3] = '\0';
-			wav = tmp4;
-			if (wav == "ata"){
-				flag = false;
-			}
-		}
-	}
-	long samplesize;
-	fread(&samplesize, 4, 1, wavread);
-#endif
-
 	//データがDSD変換時にきれいに割り切れるように、頭にゼロフィルする
 	ifstream ifs(".\\FIRFilter.dat");
 	int section_1 = 0;
@@ -4215,15 +4013,6 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	}
 	getline(ifs, str);
 	section_1 = atoi(str.c_str());
-#if 0	// 未使用?メモリリークしている
-	double *firfilter_table = new double[section_1];//
-	__int64 i = 0;
-	while (getline(ifs, str))
-	{
-		firfilter_table[i] = atof(str.c_str());
-		i++;
-	}
-#endif
 	ifs.close();
 
 	__int64 buffer_int = 0;
@@ -4285,7 +4074,8 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 	ullSrcOffsetSheekPos = 0;
 
 	//各種フォーマットの値をdouble型変数に-1,1に正規化して入れる
-	if (floatint){
+	if (formatTag == WAVE_FORMAT_PCM){
+		// intデータ
 #if 0
 		for (int i = 0; i < writelength; i++){
 			if (!m_dProgress.Cancelbottun){
@@ -4363,119 +4153,127 @@ bool CPCMDSD_ConverterDlg::TmpWriteData(EXT_TYPE etExtType, TCHAR *filepath, FIL
 		dbLR = GetAveragedB(&dbL, &dbR);
 //		TRACE("%3.2fdb(L) %3.2fdb(R)\n", dbL, dbR);
 #endif
-	}
-	else if (bitdepth == 32){
+	} else if (formatTag == WAVE_FORMAT_IEEE_FLOAT) {
+		// floatデータ
+		if (bitdepth == 32){
 #if 0
-		for (int i = 0; i < writelength; i++){
-			if (!m_dProgress.Cancelbottun){
-				fclose(wavread);
-				return false;
+			for (int i = 0; i < writelength; i++){
+				if (!m_dProgress.Cancelbottun){
+					fclose(wavread);
+					return false;
+				}
+				fread(&buffer_float, bitdepth / 8, 1, wavread);
+				buffer_double = buffer_float;
+				fwrite(&buffer_double, 8, 1, tmpl);
+				fread(&buffer_float, bitdepth / 8, 1, wavread);
+				buffer_double = buffer_float;
+				fwrite(&buffer_double, 8, 1, tmpr);
 			}
-			fread(&buffer_float, bitdepth / 8, 1, wavread);
-			buffer_double = buffer_float;
-			fwrite(&buffer_double, 8, 1, tmpl);
-			fread(&buffer_float, bitdepth / 8, 1, wavread);
-			buffer_double = buffer_float;
-			fwrite(&buffer_double, 8, 1, tmpr);
-		}
 #else
-		while(1){
-			if (!m_dProgress.Cancelbottun){
-				fclose(wavread);
-				return false;
-			}
+			while(1){
+				if (!m_dProgress.Cancelbottun){
+					fclose(wavread);
+					return false;
+				}
 
-			ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
-			ullSrcSheekPos = ullIdxSrc * nBlock;
-			if (ullSrcSheekPos >= samplesize) {
-				// 最後の1秒に満たなかった平均ピークデシベル算出
-				CalcPeakdB();
-				break;
-			}
-			_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
-			ullSrcOffsetSheekPos = ullSrcSheekPos;
+				ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
+				ullSrcSheekPos = ullIdxSrc * nBlock;
+				if (ullSrcSheekPos >= samplesize) {
+					// 最後の1秒に満たなかった平均ピークデシベル算出
+					CalcPeakdB();
+					break;
+				}
+				_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
+				ullSrcOffsetSheekPos = ullSrcSheekPos;
 
-			fread(&buffer_float, bitbyte, 1, wavread);
-			ullSrcOffsetSheekPos += (bitbyte);
-			buffer_double = (double)buffer_float;
-			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
-			ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
-			if(ullFwRet != 1){
-				fclose(wavread);
-				return false;
-			}
+				fread(&buffer_float, bitbyte, 1, wavread);
+				ullSrcOffsetSheekPos += (bitbyte);
+				buffer_double = (double)buffer_float;
+				buffer_double *= AMP_LIMIT_MAX;
+				PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
+				ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
+				if(ullFwRet != 1){
+					fclose(wavread);
+					return false;
+				}
 
-			fread(&buffer_float, bitbyte, 1, wavread);
-			ullSrcOffsetSheekPos += (bitbyte);
-			buffer_double = (double)buffer_float;
-			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
-			ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
-			if(ullFwRet != 1){
-				fclose(wavread);
-				return false;
-			}
+				fread(&buffer_float, bitbyte, 1, wavread);
+				ullSrcOffsetSheekPos += (bitbyte);
+				buffer_double = (double)buffer_float;
+				buffer_double *= AMP_LIMIT_MAX;
+				PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
+				ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
+				if(ullFwRet != 1){
+					fclose(wavread);
+					return false;
+				}
 
-			ullIdxDst++;
-		}
-		dbLR = GetAveragedB(&dbL, &dbR);
-//		TRACE("%3.2fdb(L) %3.2fdb(R)\n", dbL, dbR);
+				ullIdxDst++;
+			}
+			dbLR = GetAveragedB(&dbL, &dbR);
+//			TRACE("%3.2fdb(L) %3.2fdb(R)\n", dbL, dbR);
 #endif
-	} else{
+		} else if (bitdepth == 64){
 #if 0
-		for (int i = 0; i < writelength; i++){
-			if (!m_dProgress.Cancelbottun){
-				fclose(wavread);
-				return false;
+			for (int i = 0; i < writelength; i++){
+				if (!m_dProgress.Cancelbottun){
+					fclose(wavread);
+					return false;
+				}
+				fread(&buffer_double, bitdepth / 8, 1, wavread);
+				fwrite(&buffer_double, 8, 1, tmpl);
+				fread(&buffer_double, bitdepth / 8, 1, wavread);
+				fwrite(&buffer_double, 8, 1, tmpr);
 			}
-			fread(&buffer_double, bitdepth / 8, 1, wavread);
-			fwrite(&buffer_double, 8, 1, tmpl);
-			fread(&buffer_double, bitdepth / 8, 1, wavread);
-			fwrite(&buffer_double, 8, 1, tmpr);
-		}
 #else
-		while (1) {
-			if (!m_dProgress.Cancelbottun){
-				fclose(wavread);
-				return false;
-			}
+			while (1) {
+				if (!m_dProgress.Cancelbottun){
+					fclose(wavread);
+					return false;
+				}
 
-			ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
-			ullSrcSheekPos = ullIdxSrc * nBlock;
-			if (ullSrcSheekPos >= samplesize) {
-				// 最後の1秒に満たなかった平均ピークデシベル算出
-				CalcPeakdB();
-				break;
-			}
-			_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
-			ullSrcOffsetSheekPos = ullSrcSheekPos;
+				ullIdxSrc = (UINT64)((double)ullIdxDst * dIdxRatio);
+				ullSrcSheekPos = ullIdxSrc * nBlock;
+				if (ullSrcSheekPos >= samplesize) {
+					// 最後の1秒に満たなかった平均ピークデシベル算出
+					CalcPeakdB();
+					break;
+				}
+				_fseeki64(wavread, ullSrcSheekPos - ullSrcOffsetSheekPos, SEEK_CUR);
+				ullSrcOffsetSheekPos = ullSrcSheekPos;
 
-			fread(&buffer_double, bitbyte, 1, wavread);
-			ullSrcOffsetSheekPos += (bitbyte);
-			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
-			ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
-			if(ullFwRet != 1){
-				fclose(wavread);
-				return false;
-			}
+				fread(&buffer_double, bitbyte, 1, wavread);
+				ullSrcOffsetSheekPos += (bitbyte);
+				buffer_double *= AMP_LIMIT_MAX;
+				PcmAnalysis(buffer_double, 0, nDstSamplePerSec);
+				ullFwRet = fwrite(&buffer_double, 8, 1, tmpl);
+				if(ullFwRet != 1){
+					fclose(wavread);
+					return false;
+				}
 
-			fread(&buffer_double, bitbyte, 1, wavread);
-			ullSrcOffsetSheekPos += (bitbyte);
-			buffer_double *= AMP_LIMIT_MAX;
-			PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
-			ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
-			if(ullFwRet != 1){
-				fclose(wavread);
-				return false;
-			}
+				fread(&buffer_double, bitbyte, 1, wavread);
+				ullSrcOffsetSheekPos += (bitbyte);
+				buffer_double *= AMP_LIMIT_MAX;
+				PcmAnalysis(buffer_double, 1, nDstSamplePerSec);
+				ullFwRet = fwrite(&buffer_double, 8, 1, tmpr);
+				if(ullFwRet != 1){
+					fclose(wavread);
+					return false;
+				}
 
-			ullIdxDst++;
-		}
-		dbLR = GetAveragedB(&dbL, &dbR);
-//		TRACE("%3.2fdB(L) %3.2fdB(R)\n", dbL, dbR);
+				ullIdxDst++;
+			}
+			dbLR = GetAveragedB(&dbL, &dbR);
+//			TRACE("%3.2fdB(L) %3.2fdB(R)\n", dbL, dbR);
 #endif
+		} else {
+			fclose(wavread);
+			return false;
+		}
+	} else {
+			fclose(wavread);
+			return false;
 	}
 //	dbL = dbL / writelength;
 //	dbR = dbR / writelength;
@@ -4539,10 +4337,15 @@ uint64_t CPCMDSD_ConverterDlg::read_le_u64(FILE* fp)
 	return v;
 }
 
-// RF64 / WAV 共通ヘッダパーサ
+// RF64 / WAV ヘッダパーサ
 bool CPCMDSD_ConverterDlg::parse_wave_or_rf64_header(FILE* fp, ST_WAVE_HEADER_INFO& info)
 {
-	// ---- RIFF / RF64 ヘッダ ----
+	// ファイル先頭へ
+	if (_fseeki64(fp, 0, SEEK_SET) != 0) {
+		return false;
+	}
+
+	// RIFF / RF64 ヘッダ
 	uint32_t riffId   = read_le_u32(fp);
 	uint32_t riffSize = read_le_u32(fp);
 	uint32_t waveId   = read_le_u32(fp);
@@ -4693,6 +4496,131 @@ void CPCMDSD_ConverterDlg::parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADE
 //		info.bitDepth      = 20;  // 有効ビット
 //		info.containerBits = 24;  // 実際の格納ビット（3byte）
 //	}
+}
+
+// SONY WAVE64ヘッダパーサ
+bool CPCMDSD_ConverterDlg::parse_wave64_header(FILE* fp, ST_WAVE_HEADER_INFO& info)
+{
+	// ファイル先頭へ
+	if (_fseeki64(fp, 0, SEEK_SET) != 0) {
+		return false;
+	}
+
+	ST_W64_CHUNK riffChunk{};
+	GUID waveGuid{};
+
+	// 1. RIFF GUID + Size
+	if (fread(&riffChunk, sizeof(riffChunk), 1, fp) != 1)
+		return false;
+
+	if (riffChunk.Guid != s_W64_GUID[W64_RIFF])
+		return false;
+
+	// 2. WAVE GUID
+	if (fread(&waveGuid, sizeof(waveGuid), 1, fp) != 1)
+		return false;
+
+	if (waveGuid != s_W64_GUID[W64_WAVE])
+		return false;
+
+	// 3. チャンクループ開始
+	bool fmtFound  = false;
+	bool dataFound = false;
+
+	memset(&info, 0, sizeof(info));
+	info.isRf64 = false; // WAVE64 なので false 固定
+
+	while (!dataFound)
+	{
+		ST_W64_CHUNK chunk{};
+		if (fread(&chunk, sizeof(chunk), 1, fp) != 1) {
+			return false;
+		}
+
+		ULONGLONG payloadSize = chunk.ullSize - sizeof(ST_W64_CHUNK);
+		// 異常サイズ ※約4.6EBより大きい
+		if (payloadSize > (1ULL << 62)) {
+			return false;
+		}
+
+		// fmt チャンク
+		if (chunk.Guid == s_W64_GUID[W64_FMT]) {
+			std::vector<BYTE> buf(payloadSize);
+			fread(buf.data(), 1, payloadSize, fp);
+
+			if (!parse_wave64_fmt_chunk(buf.data()	, payloadSize, info))
+				return false;
+
+			fmtFound = true;
+		}
+
+		// data チャンク
+		else if (chunk.Guid == s_W64_GUID[W64_DATA]) {
+			info.dataOffset    = _ftelli64(fp);
+			info.dataSizeBytes = payloadSize;
+
+			// フレーム数（1フレーム＝全ch分）
+			if (info.blockAlign == 0)
+				return false;
+
+			info.totalFrames = info.dataSizeBytes / info.blockAlign;
+
+			dataFound = true;
+		} else {
+			// その他チャンクはスキップ
+			if (_fseeki64(fp, (LONGLONG)payloadSize, SEEK_CUR) != 0){
+				return false;
+			}
+		}
+	}
+
+	return fmtFound && dataFound;
+}
+
+// SONY WAVE64 fmtチャンクパーサ
+bool CPCMDSD_ConverterDlg::parse_wave64_fmt_chunk(const BYTE* buf, size_t size, ST_WAVE_HEADER_INFO& info)
+{
+	WAVEFORMATEX* wfx = (WAVEFORMATEX*)buf;
+
+	if (wfx->wFormatTag == WAVE_FORMAT_PCM ||
+		wfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+		if (size < sizeof(PCMWAVEFORMAT)) {
+			return false;
+		}
+
+		info.sampleRate = wfx->nSamplesPerSec;
+		info.bitDepth	= wfx->wBitsPerSample;
+		info.channels	= wfx->nChannels;
+		info.blockAlign = wfx->nBlockAlign;
+		info.formatTag	= wfx->wFormatTag;
+		return true;
+	}
+
+	if (wfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+		if (size < sizeof(WAVEFORMATEXTENSIBLE)) {
+			return false;
+		}
+
+		WAVEFORMATEXTENSIBLE* wfex = (WAVEFORMATEXTENSIBLE*)buf;
+		info.sampleRate = wfex->Format.nSamplesPerSec;
+		info.bitDepth	= wfex->Samples.wValidBitsPerSample ?
+						  wfex->Samples.wValidBitsPerSample :
+						  wfex->Format.wBitsPerSample;
+		info.channels	= wfex->Format.nChannels;
+		info.blockAlign = wfex->Format.nBlockAlign;
+
+		if (wfex->SubFormat == KSDATAFORMAT_SUBTYPE_PCM) {
+			info.formatTag = WAVE_FORMAT_PCM;
+		} else if (wfex->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) {
+			info.formatTag = WAVE_FORMAT_IEEE_FLOAT;
+		} else{
+			return false;
+		}
+
+		return true;
+	}
+
+	return false;
 }
 
 // 振幅を解析　戻り値：デシベル変換値 ※解析っていっても登録してるだけ

@@ -403,29 +403,29 @@ public:
 	// WAVサンプリングレート取得
 	bool GetWavSamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
 	//WAVファイルチェック及びメタデータ読み取り
-	afx_msg bool WAV_Metadata(TCHAR *filepath, CString *metadata);
-	afx_msg bool WAV_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
+	bool WAV_Metadata(TCHAR *filepath, CString *metadata);
+	bool WAV_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
 	// SONY WAVE64サンプリングレート取得
 	bool GetWave64SamplePerSec(TCHAR *filepath, int *pnSamplePerSec);
 	//SONT WAVE64(W64)ファイルチェック及びメタデータ読み取り
-	afx_msg bool Wave64_Metadata(TCHAR *filepath, CString *metadata);
-	afx_msg bool Wave64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
+	bool Wave64_Metadata(TCHAR *filepath, CString *metadata);
+	bool Wave64_Metadata(TCHAR *filepath, CString *metadata, int *pnSamplePerSec);
 	// RF64サンプリングレート取得
 	bool GetRf64SamplePerSec(TCHAR* filepath, int* pnSamplePerSec);
 	// RF64ファイルチェック及びメタデータ取得
 	afx_msg bool Rf64_Metadata(TCHAR* filepath, CString* metadata);
 	afx_msg bool Rf64_Metadata(TCHAR* filepath, CString* metadata, int* pnSamplePerSec);
-	//Flacファイルチェック及びメタデータ読み取り
+	// Flacファイルチェック及びメタデータ読み取り
 	afx_msg bool FLAC_Metadata(TCHAR *filepath, CString *metadata);
 	// ALAC(.m4a)ファイルチェック及びメタデータ読み取り
 	bool ALAC_Metadata(TCHAR *filepath, CString *metadata);
 	// DFFファイルチェック及びメタデータ読み取り
 	bool DFF_Metadata(TCHAR *filepath, CString *metadata);
-	//Flacタグデータ読み取り
+	// Flacタグデータ読み取り
 	afx_msg bool FLAC_Tagdata(TCHAR *filepath, PSTFLAC_COMMENT pstTag, BOOL *pbEnable);
-	//  ALACファイルタグデータ読み取り
+	// ALACファイルタグデータ読み取り
 	bool ALAC_Tagdata(TCHAR *filepath, PSTFLAC_COMMENT pstTag);
-	//  WAVファイルタグ(RIFF)データ読み取り
+	// WAVファイルタグ(RIFF)データ読み取り
 	bool WAV_Tagdata(TCHAR *filepath, PSTFLAC_COMMENT pstTag, BOOL *pbEnable);
 	// WAVファイル用タグデータ設定
 	afx_msg UINT SetTagdataForWav(TCHAR *filepath, int nTrackNo, int nTrackTotal, PSTID3TAGINFO pstID3v2Tag);
@@ -459,7 +459,7 @@ public:
 	afx_msg void MakeSynchsafeIntegerSize(DWORD dwSize, unsigned char size[4]);
 	// フレームサイズ取得
 	void GetFrameSize(DWORD dwSize, BOOL bSynchsafeIntegerSize, unsigned char size[4]);
-	//PCM-DSD変換の管理
+	// PCM-DSD変換の管理
 	afx_msg bool WAV_ConvertProc(EXT_TYPE etExtType, TCHAR *orgfilepath, TCHAR *filepath, int number, bool bDelWavFile, bool bLastDataFlag = true, int mode = 0);
 	// PCM-DSD変換
 	afx_msg bool WAV_Convert(EXT_TYPE etExtType, TCHAR *orgfilepath, TCHAR *filepath, int number, bool bDelWavFile);
@@ -469,9 +469,9 @@ public:
 	afx_msg bool DFFtoDSFconvert(TCHAR *filepath);
 	// DFF-DSF変換進捗コールバック関数
 	static BOOL CALLBACK DFFtoDSFconvertProgress(UINT nProgress, void *pPrm);
-	//DSDIFF形式で書き込み
+	// DSDIFF形式で書き込み
 	afx_msg bool DSD_Write(FILE *LData, FILE *RData, FILE *WriteData, int number);
-	//DSF形式で書き込み
+	// DSF形式で書き込み
 	afx_msg bool DSD_WriteDSF(FILE *LData, FILE *RData, INT64 iSeekOffset, FILE *WriteData, int number);
 	// DSFファイルID3v2タグ書き込み
 	afx_msg bool DSFID3V2Write(FILE *WriteData);
@@ -487,12 +487,16 @@ public:
 	static uint16_t read_le_u16(FILE* fp);
 	static uint32_t read_le_u32(FILE* fp);
 	static uint64_t read_le_u64(FILE* fp);
-	// RF64 / WAV 共通ヘッダパーサ
+	// RF64 / WAV ヘッダパーサ
 	static bool parse_wave_or_rf64_header(FILE* fp, ST_WAVE_HEADER_INFO& info);
-	// ds64チャンクパーサ
+	// RF64 ds64 チャンクパーサ
 	static void parse_ds64(FILE* fp, uint32_t chunkSize, Ds64Info& ds64);
-	// fmtチャンクパーサ
+	// RF64 / WAV fmtチャンクパーサ
 	static void parse_fmt(FILE* fp, uint32_t chunkSize, ST_WAVE_HEADER_INFO& info);
+	// SONY WAVE64 ヘッダパーサ
+	static bool parse_wave64_header(FILE* fp, ST_WAVE_HEADER_INFO& info);
+	// SONY WAVE64 fmtチャンクパーサ
+	static bool parse_wave64_fmt_chunk(const BYTE* buf, size_t size, ST_WAVE_HEADER_INFO& info);
 	// 振幅を解析　戻り値：デシベル変換値
 	void PcmAnalysis(double amp_value, int ch, int nPcmSamplingRate);
 	// 振幅ピーク値取得 ※左右Chの大きい方
