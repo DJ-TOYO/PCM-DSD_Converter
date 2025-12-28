@@ -5785,7 +5785,10 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 			wsprintf(errorMessage1, TEXT("%d"), nConvertCount);
 			TCHAR *errorMessage2 = L"件の処理を実行しました";
 			lstrcat(errorMessage1, errorMessage2);
+			TRACE(errorMessage1);
+#if 0
 			pDlg->MessageBox(errorMessage1, L"処理完了", MB_OK);
+#endif
 		}
 	} else if (pDlg->m_dwConvertProcessFlag == 1){
 		//*** アルバム実行 ***
@@ -5986,7 +5989,9 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 			wsprintf(errorMessage1, TEXT("%d"), nConvertCountTotal);
 			TCHAR *errorMessage2 = L"件の処理を実行しました";
 			lstrcat(errorMessage1, errorMessage2);
+#if 0
 			pDlg->MessageBox(errorMessage1, L"処理完了", MB_OK);
+#endif
 		}
 	} else {
 		//*** 実行 ***
@@ -6141,7 +6146,9 @@ UINT __cdecl CPCMDSD_ConverterDlg::WorkThread(LPVOID pParam)
 			wsprintf(errorMessage1, TEXT("%d"), nConvertCount);
 			TCHAR *errorMessage2 = L"件の処理を実行しました";
 			lstrcat(errorMessage1, errorMessage2);
+#if 0
 			pDlg->MessageBox(errorMessage1, L"処理完了", MB_OK);
+#endif
 		}
 	}
 
