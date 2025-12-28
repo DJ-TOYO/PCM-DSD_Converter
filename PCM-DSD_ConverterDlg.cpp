@@ -118,8 +118,8 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 		}
 
 		if (m_IniFile.GetPrivateProfile(_T("OPTION"), _T("GainMode"), -1, &m_radioGainMode) == -1) {
-			m_radioGainMode = 0;		// ÉQÉCÉìí≤êÆ
-//			m_radioGainMode = 1;		// ÉQÉCÉìêßå¿
+//			m_radioGainMode = 0;		// ÉQÉCÉìí≤êÆ
+			m_radioGainMode = 1;		// ÉQÉCÉìêßå¿
 			m_IniFile.WritePrivateProfile(_T("OPTION"), _T("GainMode"), m_radioGainMode);
 		}
 //		m_radioGainModeDdv = m_radioGainMode;
@@ -132,7 +132,8 @@ CPCMDSD_ConverterDlg::CPCMDSD_ConverterDlg(CWnd* pParent /*=NULL*/)
 		}
 
 		if (m_IniFile.GetPrivateProfile(_T("OPTION"), _T("GainLimit"), -1, &m_nGainLimitIdx) == -1) {
-			m_nGainLimitIdx = 3;
+			// 0:-10dBÅ`14:-24dB
+			m_nGainLimitIdx = 3;	// -13dB
 			m_IniFile.WritePrivateProfile(_T("OPTION"), _T("GainLimit"), m_nGainLimitIdx);
 		}
 
