@@ -870,6 +870,14 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata, int 
 	metadata[EN_LIST_COLUMN_PATH] = filepath;
 	metadata[EN_LIST_COLUMN_FILE_NAME] = filename;
 
+	metadata[EN_LIST_COLUMN_TRACK_NO] = "";
+	metadata[EN_LIST_COLUMN_TITLE] = "";
+	metadata[EN_LIST_COLUMN_ARTIST] = "";
+	metadata[EN_LIST_COLUMN_ALBUM] = "";
+	metadata[EN_LIST_COLUMN_DISC_NO] = "";
+	metadata[EN_LIST_COLUMN_DISC_TOTAL] = "";
+	metadata[EN_LIST_COLUMN_ALBUM_ARTIST] = "";
+
 	CString strExt(fileext);
 	strExt.MakeUpper();
 	if (strExt != _T(".WAV") && strExt != _T(".RF64")) {
@@ -937,18 +945,22 @@ bool CPCMDSD_ConverterDlg::WAV_Metadata(TCHAR *filepath, CString *metadata, int 
 	STFLAC_COMMENT stFlacComm;
 	BOOL bTagEnable = FALSE;
 
-	FlacCommentInit(&stFlacComm, 1);
-	WAV_Tagdata(filepath, &stFlacComm, &bTagEnable);
+	// WAV? ※CRiffSIFがWAV(RIFFヘッダ)のみ対応でRF64(RF64ヘッダ)には未対応なのでWAV_Tagdata()を呼んでも意味がないので。
+	if (strExt == _T(".WAV")) {
+		// タグ設定
+		FlacCommentInit(&stFlacComm, 1);
+		// WAVタグデータ取得
+		WAV_Tagdata(filepath, &stFlacComm, &bTagEnable);
+		metadata[EN_LIST_COLUMN_TRACK_NO] = stFlacComm.strTracknumber;
+		metadata[EN_LIST_COLUMN_TITLE] = stFlacComm.strTitle;
+		metadata[EN_LIST_COLUMN_ARTIST] = stFlacComm.strArtist;
+		metadata[EN_LIST_COLUMN_ALBUM] = stFlacComm.strAlbum;
+		metadata[EN_LIST_COLUMN_DISC_NO] = stFlacComm.strDiscnumber;
+		metadata[EN_LIST_COLUMN_DISC_TOTAL] = stFlacComm.strDisctotal;
+		metadata[EN_LIST_COLUMN_ALBUM_ARTIST] = stFlacComm.strAlbumArtist;
 
-	metadata[EN_LIST_COLUMN_TRACK_NO]	   = stFlacComm.strTracknumber;
-	metadata[EN_LIST_COLUMN_TITLE]		   = stFlacComm.strTitle;
-	metadata[EN_LIST_COLUMN_ARTIST] 	   = stFlacComm.strArtist;
-	metadata[EN_LIST_COLUMN_ALBUM]		   = stFlacComm.strAlbum;
-	metadata[EN_LIST_COLUMN_DISC_NO]	   = stFlacComm.strDiscnumber;
-	metadata[EN_LIST_COLUMN_DISC_TOTAL]    = stFlacComm.strDisctotal;
-	metadata[EN_LIST_COLUMN_ALBUM_ARTIST]  = stFlacComm.strAlbumArtist;
-
-	FlacCommentInit(&stFlacComm, 0);
+		FlacCommentInit(&stFlacComm, 0);
+	}
 
 	return true;
 }
@@ -7383,7 +7395,7 @@ bool CPCMDSD_ConverterDlg::AlacDecode(TCHAR *psrcfile, TCHAR *pdecodefile)
 //Wav/FLAC/ALAC/DFFファイルがドロップされた時の初動
 void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName, BOOL bErrMsgEnable)
 {
-	CString *metadata = new CString[EN_LIST_COLUMN_MAX];
+	CString metadata[EN_LIST_COLUMN_MAX];
 	bool flag = true;
 	bool metaSuccess = false;
 
@@ -7437,8 +7449,6 @@ void CPCMDSD_ConverterDlg::WAV_FileRead(TCHAR *FileName, BOOL bErrMsgEnable)
 	else {
 		TRACE(_T("WAV_FileRead() 未対応ファイル:%s\n"), FileName);
 	}
-
-	delete[] metadata;
 }
 
 //ディレクトリの再帰的検索
