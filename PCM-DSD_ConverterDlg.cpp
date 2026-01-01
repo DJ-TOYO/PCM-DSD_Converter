@@ -18,9 +18,7 @@
 #include <string.h>
 #include <mmsystem.h>
 #include <filesystem>
-
-// libbw64でRF64のfloatが未対応だったので自前で対応したので不要
-//#include "bw64/bw64.hpp"	// libbw64 - ITU-R BS.2088 Library ※hppのみで動作可能なライブラリ
+#include <vector>
 
 #pragma comment(lib, "version.lib")
 //#ifdef _DEBUG
