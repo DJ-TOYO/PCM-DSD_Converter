@@ -39,7 +39,7 @@ BOOL CAlacDecode::Open(CString strFile)
 {
 	CFileException fe;
 	BOOL bRet;
-	int type;
+	int type = 0;
 
 	if (m_File.m_hFile != CFile::hFileNull){
 		return FALSE;
