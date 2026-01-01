@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
-                             - PCM-DSD Converter 改 Ver1.13β2 -
+                             - PCM-DSD Converter 改 Ver1.13 -
 --------------------------------------------------------------------------------
-                                                              DJ TOYO 2025/12/25
+                                                              DJ TOYO 2026/01/01
 【はじめに】
 
 「PCM-DSD_Converter改」はserieril氏作DSD変換ソフト「PCM-DSD_Converter V1.0.0.11」をベースに
@@ -681,6 +681,7 @@ https://visualstudio.microsoft.com/ja/downloads/#other-ja-family
   ・RF64(.rf64)ファイルに対応
   ・WAV/SONY WAVE64の互換性向上
   ・音量調整であるゲイン(dB)の初期設定を調整-1.dB0から制限-13dBに変更
+  ・変換完了時に表情されるメッセージボックスを廃止
   ・FLAC Ver1.5.0に差し替え
   ・Ogg Ver1.3.6に差し替え
 
