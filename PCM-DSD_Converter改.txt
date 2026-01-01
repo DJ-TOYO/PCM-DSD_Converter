@@ -677,7 +677,7 @@ https://visualstudio.microsoft.com/ja/downloads/#other-ja-family
 
 
 【履歴】
-  Ver1.13β2 2025/12/25
+  Ver1.13 2026/01/01
   ・RF64(.rf64)ファイルに対応
   ・WAV/SONY WAVE64の互換性向上
   ・音量調整であるゲイン(dB)の初期設定を調整-1.dB0から制限-13dBに変更
